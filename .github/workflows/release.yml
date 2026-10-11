@@ -1,14 +1,12 @@
 name: Release wgt
 
-# On a v* tag: build tizen-app/ into a .wgt signed with a throwaway author
+# EXPERIMENTAL, manual only (Actions > Release wgt > Run workflow): build tizen-app/ into a .wgt signed with a throwaway author
 # certificate generated on the runner, and attach it to a GitHub Release.
 # The package is meant to be RE-SIGNED by the user's installer
 # (e.g. Apps2Samsung) with their own Samsung certificate, so the throwaway
 # cert is discarded after the build. No TMDB token is ever included.
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
