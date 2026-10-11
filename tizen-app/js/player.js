@@ -383,15 +383,21 @@
     if (P.items.length < 2) return;
     var box = $('player-eps'), tr = box.querySelector('.eptrack'); tr.innerHTML = '';
     var cur = P.items[P.index], season = (cur.info && cur.info.season) || 1, tiles = [], focusEl = null;
+    var hd = box.querySelector('.peps-h'); if (!hd) { hd = N.el('div', 'peps-h'); box.insertBefore(hd, tr); }
     P.items.forEach(function (it, i) {
       if (((it.info && it.info.season) || 1) !== season) return;
       var t = N.ui.epTile(it, i, {}); t.onclick = function () { P.closeEps(); P.playIndex(i); };
       t.onfocus2 = function () { N.ui.slideTo(tr, t._x); };
-      tr.appendChild(t); tiles.push(t); if (i === P.index) focusEl = t;
+      if (i === P.index) { t.classList.add('now'); t.appendChild(N.el('div', 'np', N.t('nowPlaying'))); focusEl = t; }
+      tr.appendChild(t); tiles.push(t);
     });
+    hd.textContent = N.t('season') + ' ' + season + '  \u00b7  ' + tiles.length + ' ' + N.t('episodes');
     N.ui.layoutTrack(tr, tiles, tiles.map(function () { return 360; }));
+    // start from a clean transform (nothing left over from a previous season); put the current episode at the start edge without animating
+    var f0 = focusEl || tiles[0];
+    tr.style.transition = 'none'; tr.style.transform = ''; tr._s = null; N.ui.slideTo(tr, f0 ? f0._x : 184); void tr.offsetWidth; tr.style.transition = '';
     box.classList.add('open'); epsOpen = true; N.nav.pushScope(box);
-    N.nav.focus(focusEl || tiles[0]); $('osd').classList.remove('off'); $('player').classList.add('osd-on');
+    N.nav.focus(f0, true); $('osd').classList.remove('off'); $('player').classList.add('osd-on');
   };
   P.closeEps = function (silent) {
     if (!epsOpen) return;

@@ -124,6 +124,8 @@
     else if (k === K.DOWN) { e.preventDefault(); nav.move('down'); }
     else if (k === K.ENTER) {
       e.preventDefault();
+      // never activate a stale (detached/hidden) element: refocus a live one instead
+      if (nav.cur && (!document.body.contains(nav.cur) || !visible(nav.cur))) { nav.cur = null; nav.focusFirst(); return; }
       if (nav.cur) { if (nav.cur.onenter) nav.cur.onenter(); else nav.cur.click(); }
     }
   });

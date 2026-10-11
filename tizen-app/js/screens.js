@@ -445,7 +445,11 @@
 
       var startIdx = 0;
       if (resume) items.forEach(function (it, i) { if (it.info && String(it.info.file_id) === String(resume.file_id)) startIdx = i; });
-      function play(i, withResume) { lastFocus = N.nav.cur; N.player.start(post, items, i, withResume ? resume : null); }
+      function play(i, withResume) {
+        // leaving for the player: remember where we were, and fully hide the episodes sheet (it would otherwise be drawn over the video)
+        backToSheet = epsOpen; lastFocus = epsOpen ? null : N.nav.cur; if (epsOpen) { epMem[curS] = i; clearTimeout(swT); swT = null; hideEps(); }
+        N.player.start(post, items, i, withResume ? resume : null);
+      }
       var info0 = items[startIdx] && items[startIdx].info || {};
       var playLabel = resume ? N.t('resume') + (isSeries ? ' S' + (info0.season || 1) + '·E' + (info0.episode || startIdx + 1) : '') : N.t('play');
       var playB;
@@ -456,56 +460,68 @@
       if (isSeries && items.length) { epB = ui.btn(N.t('episodes'), function () { openEps(); }, '', 'list'); btns.appendChild(epB); }
 
       /* episodes sheet */
-      var sheet = null, tabs = null, wrap = null, track = null, seasons = [], map = {}, epMem = {};
+      var sheet = null, tabs = null, wrap = null, track = null, tmeta = null, seasons = [], map = {}, epMem = {}, tileBy = {}, backToSheet = false;
       if (epB) {
         sheet = el('div', 'sheet-eps'); tabs = el('div', 'tabs'); wrap = el('div', 'eptrack-w'); track = el('div', 'eptrack'); wrap.appendChild(track);
-        sheet.appendChild(tabs); sheet.appendChild(wrap); root.appendChild(sheet);
+        tmeta = el('div', 'tabs-meta tab'); sheet.appendChild(tabs); sheet.appendChild(tmeta); sheet.appendChild(wrap); root.appendChild(sheet);
         items.forEach(function (it, i) { var s = (it.info && it.info.season) || 1; if (!map[s]) { map[s] = []; seasons.push(s); } map[s].push(i); });
         seasons.forEach(function (s, si) {
           var t = ui.pill(N.t('season') + ' ' + s, function () { focusEp(); }, false); t._s = s;
           t.onfocus2 = function () { showSeason(s); };
           t.onnav = function (dir) {
-            if (dir === 'down') { flush(); return epMem[curS] || track.firstChild || true; }
+            if (dir === 'down') { flush(); return epTarget(curS) || true; }
             if (dir === 'up') return true;
             var d = ui.step(dir), n = tabs.children[si + d]; return n || true;
           };
           tabs.appendChild(t);
         });
       }
+      // tile to focus when entering season s: the remembered episode (an index, never a node: tiles are rebuilt on every season switch), else the first
+      function epTarget(s) { var i = epMem[s]; return (i !== undefined && tileBy[i]) || track.firstChild; }
       function buildSeason(s) {
-        track.innerHTML = ''; var tiles = [];
+        track.innerHTML = ''; tileBy = {}; var tiles = [];
         map[s].forEach(function (idx) {
           var it = items[idx], prog = 0;
           if (resume && it.info && String(it.info.file_id) === String(resume.file_id) && Number(resume.duration) > 0) prog = Number(resume.time) / Number(resume.duration);
           var t = ui.epTile(it, idx, { progress: prog });
           t.onclick = function () { play(idx, true); };
-          t.onfocus2 = function () { ui.slideTo(track, t._x); epMem[s] = t; };
+          t.onfocus2 = function () { ui.slideTo(track, t._x); epMem[s] = idx; };
           t.onnav = function (dir) {
             if (dir === 'up') { for (var q = 0; q < tabs.children.length; q++) if (tabs.children[q]._s === curS) return tabs.children[q]; return true; }
             if (dir === 'down') return true;
             var d = ui.step(dir), i = tiles.indexOf(t); return tiles[i + d] || true;
           };
-          t._idx = idx; track.appendChild(t); tiles.push(t);
+          t._idx = idx; tileBy[idx] = t; track.appendChild(t); tiles.push(t);
         });
         ui.layoutTrack(track, tiles, tiles.map(function () { return 360; }));
-        track.style.transition = 'none'; track._s = null; ui.slideTo(track, tiles[0] ? tiles[0]._x : 184); void track.offsetWidth; track.style.transition = '';
+        // position the track for the remembered tile (no animation, nothing carried over from another season)
+        var tg = epTarget(s);
+        track.style.transition = 'none'; track._s = null; track.style.transform = ''; ui.slideTo(track, tg ? tg._x : 184); void track.offsetWidth; track.style.transition = '';
+        tmeta.textContent = tiles.length + ' ' + N.t('episodes');
       }
       function showSeason(s, now) {
         if (s === curS) return; curS = s;
         for (var q = 0; q < tabs.children.length; q++) tabs.children[q].classList.toggle('cur', tabs.children[q]._s === s);
-        clearTimeout(swT);
-        if (now) { buildSeason(s); return; }
+        clearTimeout(swT); swT = null;
+        if (now) { buildSeason(s); wrap.classList.remove('sw'); return; }
         wrap.classList.add('sw'); swT = setTimeout(function () { swT = null; buildSeason(s); wrap.classList.remove('sw'); }, 160);
       }
       function flush() { if (swT) { clearTimeout(swT); swT = null; buildSeason(curS); wrap.classList.remove('sw'); } }
-      function focusEp() { flush(); var t = epMem[curS] || track.firstChild; if (t) N.nav.focus(t, true); }
-      function openEps() {
+      function focusEp() { flush(); var t = epTarget(curS); if (t) N.nav.focus(t, true); }
+      // open the sheet on episode index idx (default: resume/start episode); inst = no slide animation (restoring after playback)
+      function openEps(idx, inst) {
         if (epsOpen || !sheet) return; epsOpen = true;
-        var s0 = (items[startIdx].info && items[startIdx].info.season) || seasons[0];
-        curS = null; showSeason(s0, true);
+        if (idx === undefined || idx === null || !items[idx]) idx = startIdx;
+        var s0 = (items[idx].info && items[idx].info.season) || seasons[0];
+        epMem[s0] = idx; curS = null; showSeason(s0, true);
+        if (inst) { root.classList.add('inst'); }
         root.classList.add('eps'); sheetScope = sheet; N.nav.pushScope(sheet);
-        var tgt = null; for (var q = 0; q < track.children.length; q++) if (track.children[q]._idx === startIdx) tgt = track.children[q];
-        N.nav.focus(tgt || track.firstChild, true);
+        if (inst) { void root.offsetWidth; setTimeout(function () { root.classList.remove('inst'); }, 60); }
+        N.nav.focus(epTarget(s0), true);
+      }
+      // hide the sheet completely (leave it for playback): visibility is hidden as soon as .eps goes away
+      function hideEps() {
+        if (!epsOpen) return; epsOpen = false; root.classList.remove('eps'); N.nav.popScope(); sheetScope = null;
       }
       function closeEps() {
         if (!epsOpen) return; epsOpen = false; root.classList.remove('eps'); N.nav.popScope(); sheetScope = null;
@@ -651,7 +667,10 @@
         }
       }
       if (tmOn) N.tmdb.details(post).then(function (d) { if (!dead && d) paintTmdb(d); }).catch(function () {});
-      current.onPlayerClosed = function () { var t = lastFocus && lastFocus.offsetWidth > 0 ? lastFocus : playB; N.nav.focus(t, true); };
+      current.onPlayerClosed = function () {
+        if (backToSheet && sheet) { backToSheet = false; openEps(N.player.index, true); return; } // same season, on the episode just played (or the one autoplay moved to)
+        var t = lastFocus && document.body.contains(lastFocus) && lastFocus.offsetWidth > 0 ? lastFocus : playB; N.nav.focus(t, true);
+      };
       N.nav.focus(playB, true);
       if (params.autoplay) {
         if (items.length) play(startIdx, true); else N.toast(N.isLoggedIn() ? N.t('noStream') : N.t('playLogin'), 3500);

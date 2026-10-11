@@ -17,6 +17,8 @@
     return out.join('&');
   }
   api.raw = function (host, key, name, params, token) {
+    // dev/test hook: tools-video/eps-test.js injects window.__mock = {action: fn(params) -> envelope}
+    if (window.__mock && window.__mock[name]) return Promise.resolve(window.__mock[name](params || {}));
     var headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       'c-api-key': key,
