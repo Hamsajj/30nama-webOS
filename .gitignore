@@ -1,0 +1,26 @@
+# secrets / personal
+tizen-app/js/tmdb-token.js
+.wizard.env
+*.p12
+*.pwd
+
+# third-party decompiled APK and binaries
+analysis/
+*.apk
+*.wgt
+build/
+dist/
+
+# tooling
+node_modules/
+tools-video/node_modules/
+tools-video/ffmpeg*
+tools-video/**/ffmpeg*
+tools-video/profile*/
+tools-video/*.png
+tools-video/*.log
+*.log
+
+# large media / screenshots (selected ones live in docs/images)
+media/*.mp4
+design/shots/
