@@ -18,8 +18,12 @@
   nav.pushScope = function (el) { nav.scopes.push(el); };
   nav.popScope = function () { nav.scopes.pop(); };
   nav.candidates = function () {
-    var list = root().querySelectorAll('.f'), out = [];
-    for (var i = 0; i < list.length; i++) if (visible(list[i]) && !list[i].disabled) out.push(list[i]);
+    var rt = root(), list = rt.querySelectorAll('.f'), out = [], inSheet = rt.classList && rt.classList.contains('sheet-eps');
+    for (var i = 0; i < list.length; i++) {
+      if (!visible(list[i]) || list[i].disabled) continue;
+      if (!inSheet && list[i].closest && list[i].closest('.sheet-eps')) continue; // the closed episodes sheet is laid out but off-screen/hidden: never a target
+      out.push(list[i]);
+    }
     return out;
   };
 

@@ -46,7 +46,7 @@ const mock = () => {
   const lastOpened = () => pg.evaluate(() => window.__opened[window.__opened.length - 1]);
   await sleep(2500);
   await pg.evaluate(() => N.go('details', { id: 77 }));
-  await sleep(1500);
+  await sleep(1500); console.log('pre', await pg.evaluate(() => Array.from(document.querySelectorAll('.screen')).map(e => e.className).join(' / ') + ' open ' + N.rail.open));
   await shot('00-details');
   await key('Right'); console.log('focus', (await st()).cur);
   await key('Enter', 900); let s = await st(); ok(s.eps, 'sheet opens'); await shot('01-sheet-open');
@@ -143,6 +143,21 @@ const mock = () => {
   await key('Left', 700); await pg.evaluate(() => { const t = document.querySelector('.btn.f, .card.f, .ep.f'); console.log('target', t && t.className, document.querySelector('.screen') && document.querySelector('.screen').className); const e = new MouseEvent('mousemove', { bubbles: true, movementX: 5, movementY: 5 }); t.dispatchEvent(e); }); await sleep(500); r = await rail(); console.log('after pointer', JSON.stringify(r)); ok(!r.open && !r.cls, 'pointer onto content collapses rail');
   await key('Left', 700); await pg.evaluate(() => N.player.start(null || {id:1,title:{english:'x'}}, N.player.items, 0, null)); await sleep(500); r = await rail(); ok(!r.open && !r.cls, 'rail collapsed when playback starts');
   await pg.evaluate(() => N.player.close()); await sleep(400); r = await rail(); ok(!r.cls, 'rail still collapsed after player closes');
+
+  // --- Back on the rail collapses it and returns to content (no exit dialog); exit confirm only on Home
+  const modalUp = () => pg.evaluate(() => !!document.querySelector('.modal'));
+  await pg.evaluate(() => N.go('details', { id: 77 })); await sleep(1500); console.log('pre', await pg.evaluate(() => Array.from(document.querySelectorAll('.screen')).map(e => e.className).join(' / ') + ' open ' + N.rail.open));
+  for (const bk of ['Esc', 'Back']) {
+    console.log('pre2', await pg.evaluate(() => JSON.stringify({ v: N.rail.visible(), sc: N.nav.scopes.length, lk: N.nav.locked, cur: N.nav.cur && N.nav.cur.className, eps: document.querySelector('.det') && document.querySelector('.det').className })));
+    await sleep(1500); await key('Left', 700); r = await rail(); console.log('afterLeft', JSON.stringify(r)); ok(r.open, 'rail open (' + bk + ')');
+    await key(bk, 700); r = await rail(); console.log('dbg', bk, JSON.stringify(r), await pg.evaluate(() => document.querySelector('.screen').className)); ok(!r.open && !(await modalUp()) && !/ri/.test(r.cur || ''), bk + ' on rail: collapsed, focus back on content, no dialog (' + r.cur + ')');
+    ok(await pg.evaluate(() => !!document.querySelector('.det')), 'still on details');
+  }
+  await pg.evaluate(() => N.go('settings', {}, { reset: true })); await sleep(900);
+  await key('Esc', 1000); ok(await pg.evaluate(() => !!document.querySelector('.screen.home')) && !(await modalUp()), 'Back on non-Home top-level goes Home, no dialog');
+  await key('Back', 700); ok(await modalUp(), 'Back on Home content shows the exit confirm (10009)');
+  await key('Esc', 600); ok(!(await modalUp()), 'Back closes the confirm');
+  await key('Esc', 700); ok(await modalUp(), 'Back on Home shows exit confirm again (Esc)');
   console.log('errors', errs.slice(0, 5)); console.log(fails ? 'FAILED ' + fails : 'ALL PASS');
   await b.close(); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

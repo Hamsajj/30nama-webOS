@@ -27,9 +27,45 @@
       'c-language': N.lang
     };
     return timeout(fetch(N.proxied(host + '/action/' + name), { method: 'POST', headers: headers, body: enc(params || {}) }), 20000, name)
-      .then(function (r) { return r.text(); })
-      .then(function (txt) { try { return JSON.parse(txt); } catch (e) { throw new Error('bad json from ' + name); } });
+      .then(function (r) {
+        var ra = parseFloat(r.headers && r.headers.get && r.headers.get('retry-after'));
+        return r.text().then(function (txt) {
+          try { return JSON.parse(txt); }
+          catch (e) { var er = new Error((r.status === 429 ? '429 ' : r.status >= 500 ? '5xx ' : '') + 'bad json from ' + name); er.retry = true; er.retryAfter = isNaN(ra) ? 0 : Math.min(ra, 10) * 1000; throw er; }
+        });
+      }, function (e) { e.retry = true; throw e; });
   };
+
+  /* ---------- global request scheduler ----------
+     30nama sits behind Cloudflare rate limiting (HTTP 429 / HTML "error code: 1015"). All 30nama calls go through one queue: max 2 in flight,
+     small spacing, core screen calls before background (TMDB resolution) calls, and transient failures (non-JSON, 429, 5xx, timeout) are retried with backoff. */
+  var Q = { core: [], bg: [] }, inflight = 0, MAXF = 2, GAPMS = 100, lastStart = 0, pausedUntil = 0, pumpT = null, BACKOFF = [1000, 3000];
+  var NO_RETRY = { observer: 1, logout: 1, qrlogin_login: 1 };
+  function pump() {
+    if (pumpT || inflight >= MAXF || !(Q.core.length || Q.bg.length)) return;
+    var now = Date.now(), wait = Math.max(pausedUntil - now, lastStart + GAPMS - now, 0);
+    if (wait > 0) { pumpT = setTimeout(function () { pumpT = null; pump(); }, wait); return; }
+    var j = Q.core.length ? Q.core.shift() : Q.bg.shift();
+    inflight++; lastStart = now;
+    j.run().then(function (v) { inflight--; j.res(v); pump(); }, function (e) { inflight--; j.rej(e); pump(); });
+    pump();
+  }
+  function schedule(bg, run) { return new Promise(function (res, rej) { (bg ? Q.bg : Q.core).push({ run: run, res: res, rej: rej }); pump(); }); }
+  api.sched = function (name, params, opts) {
+    var bg = !!(opts && opts.bg), tries = NO_RETRY[name] ? 0 : BACKOFF.length;
+    function attempt(n) {
+      return schedule(bg, function () { return api.rawCall(name, params); }).catch(function (e) {
+        if (n < tries && e && e.retry) {
+          var d = Math.max(BACKOFF[n], e.retryAfter || 0);
+          pausedUntil = Math.max(pausedUntil, Date.now() + d);
+          return new Promise(function (r) { setTimeout(r, d); }).then(function () { return attempt(n + 1); });
+        }
+        throw e;
+      });
+    }
+    return attempt(0);
+  };
+  api.rawCall = function (name, params) { return api.raw(api.host, api.key, name, params, N.session ? N.session.token : ''); };
 
   // Try a discovery URL (CORS may block it in a browser; fall back to hardcoded hosts).
   function discover() {
@@ -74,9 +110,8 @@
   };
 
   // Generic action. Resolves with envelope; rejects on network errors.
-  api.call = function (name, params) {
-    var token = N.session ? N.session.token : '';
-    return api.raw(api.host, api.key, name, params, token).then(function (j) {
+  api.call = function (name, params, opts) {
+    return api.sched(name, params, opts).then(function (j) {
       if (j && !j.success && /login required/i.test(j.msg || '') && N.session) {
         // session invalid/expired
         N.logout(true);
@@ -85,8 +120,8 @@
     });
   };
   // Resolves with result or rejects with Error(msg)
-  api.get = function (name, params) {
-    return api.call(name, params).then(function (j) {
+  api.get = function (name, params, opts) {
+    return api.call(name, params, opts).then(function (j) {
       if (!j || !j.success) { var e = new Error((j && j.msg) || 'error'); e.msg = j && j.msg; throw e; }
       return j.result;
     });

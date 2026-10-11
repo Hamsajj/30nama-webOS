@@ -89,7 +89,8 @@ html[dir=rtl] .rail-base{background:linear-gradient(to left,rgba(7,8,11,.8),rgba
 .rail-panel{position:absolute;top:0;inset-inline-start:0;width:440px;height:1080px;opacity:0;transform:translateX(calc(var(--dir) * -24px));
   background:linear-gradient(to right,rgba(7,8,11,.97) 0,rgba(7,8,11,.97) 340px,rgba(7,8,11,0) 440px);transition:opacity 240ms var(--e-out),transform 240ms var(--e-out);will-change:transform,opacity}
 html[dir=rtl] .rail-panel{background:linear-gradient(to left,rgba(7,8,11,.97) 0,rgba(7,8,11,.97) 340px,rgba(7,8,11,0) 440px)}
-.rail-brand{position:absolute;top:54px;inset-inline-start:0;width:120px;text-align:center;font-family:"Vz",sans-serif;font-size:40px;font-weight:800;line-height:48px;color:var(--accent)}
+.rail-brand{position:absolute;top:44px;inset-inline-start:0;width:120px;height:72px;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.rail-brand .mark{height:64px;width:auto;display:block}
 .rail-pill{position:absolute;top:0;inset-inline-start:20px;width:300px;height:64px;border-radius:32px;background:#fff;opacity:0;transform:translateY(288px);transition:transform 200ms var(--e-out),opacity 200ms var(--e-out);will-change:transform}
 #rail.open .rail-scrim{opacity:.45}
 #rail.open .rail-panel{opacity:1;transform:none}

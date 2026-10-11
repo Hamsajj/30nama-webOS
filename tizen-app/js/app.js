@@ -18,7 +18,12 @@
   N.getHome = function () {
     if (hc.p && Date.now() - hc.t < 90000) return hc.p;
     hc.t = Date.now();
-    hc.p = N.api.get('home_stream').catch(function (e) { hc.p = null; throw e; });
+    hc.p = N.api.get('home_stream').then(function (r) { N.store.set('homeCache', r); return r; }).catch(function (e) {
+      hc.p = null;
+      var c = N.store.get('homeCache', null); // last good Home: show it instead of an error, and retry in the background
+      if (c) { setTimeout(function () { N.getHome(); }, 15000); return c; }
+      throw e;
+    });
     return hc.p;
   };
   N.dropHome = function () { hc.p = null; };
@@ -43,7 +48,7 @@
   rail.build = function () {
     var r = rail.root = $('rail'); r.innerHTML = ''; rail.items = [];
     r.appendChild(el('div', 'rail-base')); r.appendChild(el('div', 'rail-scrim'));
-    r.appendChild(el('div', 'rail-panel')); r.appendChild(el('div', 'rail-brand', '30'));
+    r.appendChild(el('div', 'rail-panel')); var br = el('div', 'rail-brand'); br.appendChild(N.ui.logo()); r.appendChild(br);
     rail.pill = el('div', 'rail-pill'); r.appendChild(rail.pill);
     RAIL.concat([ACCT]).forEach(function (m, i) {
       var b = el('button', 'ri' + (m[0] === 'account' ? ' acct' : '')); b._key = m[0]; b._y = yOf(i); b.style.top = b._y + 'px';
@@ -178,11 +183,12 @@
   N.onBack = function () {
     if (N.player.open) { N.player.close(); return; }
     if (modal) { N.closeModal(); return; }
-    if (rail.open) { N.confirmExit(); return; }
+    if (rail.open) { rail.close(true); return; } // Back on the menu: collapse it and return to the content
     if (current && current.back && current.back()) return;
     if (stack.length > 1) { stack.pop(); render(stack[stack.length - 1]); return; }
-    if (rail.visible()) { rail.enter(); return; }
-    N.confirmExit();
+    var top = stack[stack.length - 1];
+    if (top && top.name !== 'home' && top.name !== 'login' && rail.visible()) { N.go('home', {}, { reset: true }); return; } // other top-level screens go Home
+    N.confirmExit(); // Home (or login): exit confirm
   };
   N.onLogout = function () { N.dropHome(); N.go('login', {}, { reset: true }); };
   N.onPlayerClosed = function () {
@@ -198,7 +204,8 @@
     N.splashReady(); rail.root.classList.add('gone'); rootEl && (rootEl.innerHTML = '');
     var r = el('div', 'screen enter'); content.innerHTML = ''; content.appendChild(r); rootEl = r; current = null;
     var w = el('div', 'center-msg'); w.appendChild(N.ui.icon('warn'));
-    w.appendChild(el('div', 'm', N.t('error') + (e && e.message ? ' (' + e.message + ')' : '')));
+    try { console.warn('boot error', e && e.message); } catch (x) {}
+    w.appendChild(el('div', 'm', N.t('error') + '. ' + N.t('tryAgain')));
     var b = N.ui.btn(N.t('retry'), boot, 'primary'); w.appendChild(b); r.appendChild(w); N.nav.focus(b, true);
   }
   function boot() {

@@ -282,7 +282,7 @@
     if (it.orig && norm(it.orig) !== norm(it.title) && /[a-z]/i.test(it.orig)) qs2.push(it.orig);
     function go(i) {
       if (i >= qs2.length || !qs2[i]) return null;
-      return N.api.get('search', { query: qs2[i], streamonly: 0, page: 1 }).then(function (r) { return bestPost((r && r.posts) || [], it) || go(i + 1); });
+      return N.api.get('search', { query: qs2[i], streamonly: 0, page: 1 }, { bg: true }).then(function (r) { return bestPost((r && r.posts) || [], it) || go(i + 1); });
     }
     return go(0);
   }

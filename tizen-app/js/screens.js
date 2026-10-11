@@ -12,7 +12,8 @@
   function errorView(root, e, retry) {
     root.innerHTML = '';
     var w = el('div', 'center-msg'); w.appendChild(ui.icon('warn'));
-    w.appendChild(el('div', 'm', N.t('error') + (e && e.message ? ' (' + e.message + ')' : '')));
+    try { console.warn('screen error', e && e.message); } catch (x) {}
+    w.appendChild(el('div', 'm', N.t('error') + '. ' + N.t('tryAgain')));
     var b = ui.btn(N.t('retry'), retry, 'primary'); w.appendChild(b); root.appendChild(w); N.nav.focus(b, true);
   }
   function instant(root, fn) { root.classList.add('noanim'); fn(); void root.offsetWidth; root.classList.remove('noanim'); }
@@ -761,7 +762,7 @@
         if (dead || my !== seq) return;
         if (!r.posts || !r.posts.length) { popular(N.t('nothingFor') + ' “' + qq + '”'); return; }
         show(r.posts, N.t('topResults'), '');
-      }).catch(function (e) { if (!dead && my === seq) popular(N.t('error') + ': ' + e.message); });
+      }).catch(function (e) { if (!dead && my === seq) popular(N.t('error') + '. ' + N.t('tryAgain')); });
     }
     layout(); popular('');
     N.nav.focus(grid.firstChild, true);
