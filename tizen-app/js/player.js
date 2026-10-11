@@ -182,6 +182,7 @@
   var SCRUB_W = 1728, glyphT = null, unState = null, epsOpen = false;
   P.spin = function (on) { $('player-spin').classList.toggle('hidden', !on); };
   P.start = function (post, items, index, resume) {
+    if (N.rail && N.rail.open) N.rail.close(false);
     P.post = post; P.items = items; P.resume = resume || null; P.open = true;
     $('player').classList.remove('hidden');
     $('subtitle').style.fontSize = N.store.get('subSize', 46) + 'px';
@@ -283,14 +284,21 @@
     if (isS) show = { label: N.t('skipIntro'), to: tn(o.intro_end) };
     else if (isP) show = { label: N.t('skipRecap'), to: tn(o.previously_end) };
     P.skip = show;
-    if (show) P.showSkip(show.label + '  ⏭'); else P.hideSkip();
+    if (show) P.showSkip(show.label); else P.hideSkip();
     // up next at credits
     var hasNext = P.index + 1 < P.items.length;
     if (hasNext && tn(o.end) > 0 && t >= tn(o.end) && !unState) P.showUpNext();
     else if (unState && tn(o.end) > 0 && t < tn(o.end) - 3 && !unState.dismissed) P.hideUpNext(true);
   };
-  P.showSkip = function (label) { var b = $('skip-btn'); if (b._l !== label) { b._l = label; b.textContent = label; } b.classList.add('show'); };
-  P.hideSkip = function () { $('skip-btn').classList.remove('show'); P.skip = null; };
+  // the pill never takes focus by itself: OK keeps toggling pause; Up focuses it (then OK skips; Down/Back/seek keys release it)
+  P.skipFocus = false;
+  P.showSkip = function (label) {
+    var b = $('skip-btn'), txt = P.skipFocus ? 'OK  \u00b7  ' + label + '  \u23ed' : '\u25b2  ' + label;
+    if (b._l !== txt) { b._l = txt; b.textContent = txt; }
+    b.classList.toggle('focus', P.skipFocus); b.classList.add('show');
+  };
+  P.hideSkip = function () { P.skipFocus = false; var b = $('skip-btn'); b.classList.remove('show', 'focus'); b._l = null; P.skip = null; };
+  P.setSkipFocus = function (on) { P.skipFocus = on; if (P.skip) P.showSkip(P.skip.label); };
   P.showOsd = function () {
     $('osd').classList.remove('off'); $('player').classList.add('osd-on'); $('scrub').classList.add('act'); clearTimeout(P.osdTimer);
     P.osdTimer = setTimeout(function () {
@@ -340,7 +348,7 @@
     var cv = N.ui.coverUrl(P.post) || N.ui.posterUrl(P.post);
     u.querySelector('.th').style.backgroundImage = cv ? 'url("' + cv + '")' : '';
     $('un-play').textContent = N.t('playNow'); $('un-cred').textContent = N.t('credits');
-    unState = { sel: 'play', dismissed: false, auto: auto };
+    unState = { sel: 'play', dismissed: false, auto: auto, active: false };
     uSel();
     u.classList.remove('hold', 'count'); u.classList.add('show');
     if (auto) { void u.offsetWidth; u.classList.add('count'); }
@@ -348,8 +356,9 @@
     u.querySelector('.cd').onanimationend = function () { if (unState && unState.auto) { P.hideUpNext(true); P.playIndex(P.index + 1); } };
   };
   function uSel() {
-    $('un-play').classList.toggle('focus', !unState || unState.sel === 'play');
-    $('un-cred').classList.toggle('focus', !!unState && unState.sel === 'cred');
+    var on = !!unState && unState.active;
+    $('un-play').classList.toggle('focus', on && unState.sel === 'play');
+    $('un-cred').classList.toggle('focus', on && unState.sel === 'cred');
   }
   P.hideUpNext = function (force) {
     var u = $('upnext');
@@ -422,27 +431,40 @@
     }
     if (k === K.BACK || k === K.ESC || k === K.BACKSPACE) {
       // Back first dismisses whatever is on screen (controls / up-next card); only a bare player exits
+      if (P.skipFocus) { P.setSkipFocus(false); return true; }
+      if (unState && unState.active) { unState.active = false; uSel(); return true; }
       if (!$('osd').classList.contains('off') || $('upnext').classList.contains('show')) { P.hideChrome(); return true; }
       P.close(); return true;
     }
     if (k === K.STOP) { P.close(); return true; }
     P.showOsd();
-    if (unState && $('upnext').classList.contains('show')) {
-      if (k === K.ENTER) {
+    var unShown = unState && $('upnext').classList.contains('show');
+    if (k === K.UP && !P.skipFocus && !(unShown && unState.active) && (unShown || P.skip)) {
+      // Up focuses the pill / Up Next card (instead of opening the audio menu)
+      if (unShown) { unState.active = true; $('upnext').classList.add('hold'); uSel(); } else P.setSkipFocus(true);
+      return true;
+    }
+    if (P.skipFocus) {
+      if (k === K.ENTER) { if (P.skip) P.be.seek(P.skip.to); P.setSkipFocus(false); return true; }
+      if (k === K.DOWN) { P.setSkipFocus(false); return true; }
+      P.setSkipFocus(false); // any other key releases it and keeps its normal meaning
+    }
+    if (unShown && unState.active) {
+      if (k === K.DOWN || k === K.UP) { unState.active = false; uSel(); return true; }
+    }
+    if (unShown) {
+      if (k === K.ENTER && unState.active) {
         var sel = unState.sel; P.hideUpNext(sel !== 'cred');
         if (sel === 'play') P.playIndex(P.index + 1);
         return true;
       }
       if (k !== K.PLAYPAUSE) $('upnext').classList.add('hold');
-      if (k === K.LEFT || k === K.RIGHT) { unState.sel = unState.sel === 'play' ? 'cred' : 'play'; uSel(); return true; }
+      if (unState.active && (k === K.LEFT || k === K.RIGHT)) { unState.sel = unState.sel === 'play' ? 'cred' : 'play'; uSel(); return true; }
     }
     if (k === K.PLAYPAUSE) { P.togglePause(); return true; }
     if (k === K.PLAY) { if (P.paused) P.togglePause(); return true; }
     if (k === K.PAUSE) { if (!P.paused) P.togglePause(); return true; }
-    if (k === K.ENTER) {
-      if (P.skip) { P.be.seek(P.skip.to); return true; }
-      P.togglePause(); return true;
-    }
+    if (k === K.ENTER) { P.togglePause(); return true; }
     if (k === K.LEFT) { P.seekBy(-10); return true; }
     if (k === K.RIGHT) { P.seekBy(10); return true; }
     if (k === K.RW) { P.seekBy(-30); return true; }

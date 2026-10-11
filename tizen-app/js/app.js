@@ -102,6 +102,13 @@
     if (same && current && stack.length === 1) { rail.mem = null; if (N.nav.cur && rail.isRail(N.nav.cur)) N.nav.clear(); N.nav.focusFirst(rootEl); return; }
     m[2]();
   };
+  // keep the expanded panel in sync with focus: leaving the rail by any route (pointer, modal return, screen change, player) collapses it
+  N.nav.onFocusChange = function (e) {
+    if (!rail.root) return;
+    var inRail = rail.isRail(e);
+    if (inRail && !rail.open && rail.visible()) { rail.open = true; rail.root.classList.add('open'); }
+    else if (!inRail && rail.open && !modal) { rail.open = false; rail.root.classList.remove('open'); rail.mem = null; }
+  };
   // start-edge press with nothing to the start side opens the rail
   N.nav.onEdge = function (dir) {
     if (rail.open || !rail.visible() || (dir !== 'left' && dir !== 'right')) return;

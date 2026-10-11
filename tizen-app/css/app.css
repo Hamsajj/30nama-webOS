@@ -433,7 +433,8 @@ html[lang=fa] #subtitle{line-height:1.6}
 #pglyph.pulse{animation:glyph 600ms var(--e-out) forwards}
 #pglyph.hold{opacity:.9}
 @keyframes glyph{0%{opacity:0;transform:scale(.85)}35%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
-#skip-btn{position:absolute;inset-inline-end:96px;top:800px;height:72px;padding-inline:36px;border-radius:var(--r-btn);background:rgba(20,22,30,.85);border:2px solid rgba(255,255,255,.6);font-size:var(--t-body);font-weight:600;z-index:6;display:flex;align-items:center;opacity:0;transform:translateX(calc(var(--dir) * 24px));transition:opacity 320ms var(--e-emph),transform 320ms var(--e-emph);pointer-events:none;color:var(--focus-ink);background:#fff;border-color:#fff}
+#skip-btn{position:absolute;inset-inline-end:96px;top:800px;height:72px;padding-inline:36px;border-radius:var(--r-btn);background:rgba(20,22,30,.85);border:2px solid rgba(255,255,255,.6);font-size:var(--t-body);font-weight:600;z-index:6;display:flex;align-items:center;opacity:0;transform:translateX(calc(var(--dir) * 24px));transition:opacity 320ms var(--e-emph),transform 320ms var(--e-emph);pointer-events:none;color:var(--text-1)}
+#skip-btn.focus{color:var(--focus-ink);background:#fff;border-color:#fff}
 #skip-btn.show{opacity:1;transform:none}
 #player.osd-on #skip-btn.show{transform:translateY(-140px)}
 #player-spin{position:absolute;left:924px;top:504px;width:72px;height:72px;border-radius:50%;border:6px solid rgba(255,255,255,.15);border-top-color:var(--accent);z-index:8;animation:spin 900ms linear infinite}

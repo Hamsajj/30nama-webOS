@@ -30,6 +30,7 @@
     if (el.tagName === 'INPUT') { try { el.focus(); } catch (e) {} }
     else if (document.activeElement && document.activeElement.tagName === 'INPUT') { document.activeElement.blur(); }
     if (!noScroll) nav.ensureVisible(el);
+    if (nav.onFocusChange) nav.onFocusChange(el);
     if (el.onfocus2) el.onfocus2(el);
   };
   nav.focusFirst = function (container) {

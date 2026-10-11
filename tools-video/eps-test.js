@@ -8,10 +8,10 @@ const mock = () => {
     info: { file_id: String((si + 1) * 100 + e), post_id: '77', season: String(si + 1), episode: ep, title: { english: 'Episode title ' + (si + 1) + 'x' + e + (e % 4 == 0 ? ' with a much longer name that wraps' : '') } },
     options: { token: 't', intro_start: '00:00:05', intro_end: '00:00:30' },
     file: { m3u8: [{ label: 'Auto', default: 'http://x/auto.m3u8' }, { label: '720p', default: 'http://x/720.m3u8' }, { label: '1080p', default: 'http://x/' + ((si + 1) * 100 + e) + '.m3u8' }], subtitle: {} } }); } });
-  window.__opened = [];
+  window.__opened = []; window.__seeks = [];
   const dur = 2400000;
-  window.webapis = { avplay: { open: u => window.__opened.push(u), close() {}, stop() {}, play() {}, pause() {}, seekTo() {}, getDuration: () => dur,
-    setDisplayRect() {}, setDisplayMethod() {}, setListener() {}, prepareAsync: cb => setTimeout(cb, 50), getTotalTrackInfo: () => [], setSelectTrack() {} } };
+  window.webapis = { avplay: { open: u => window.__opened.push(u), close() {}, stop() {}, play() {}, pause() {}, seekTo(ms) { window.__seeks.push(ms); }, getDuration: () => dur,
+    setDisplayRect() {}, setDisplayMethod() {}, setListener(l) { window.__l = l; }, prepareAsync: cb => setTimeout(cb, 50), getTotalTrackInfo: () => [], setSelectTrack() {} } };
   window.__mock = {
     test: () => ({ success: true, result: {} }),
     single: () => ({ success: true, result: { id: 77, title: { english: 'Long Show', local: 'سریال طولانی' }, plot: { english: 'A long running series used to test the episodes selector on a TV.' }, options: { is_series: true }, info: { year: 2015, seasons: 4 }, image: {}, genre: [{ name: 'Drama' }], score: {} } }),
@@ -114,6 +114,35 @@ const mock = () => {
   ok((await lastOpened()).endsWith('/411.m3u8'), 'next after E10 is E11-12');
   await pg.evaluate(() => N.player.onEnded()); await sleep(600);
   ok((await lastOpened()).endsWith('/413.m3u8'), 'next after E11-12 is E13');
+
+  // --- skip pill is never auto-focused: OK pauses; Up focuses it; OK then skips
+  await pg.evaluate(() => { const P = N.player; P.start(P.post, P.items, P.items.findIndex(i => i.info.file_id === '410'), null); }); await sleep(800);
+  ok(await pg.evaluate(() => N.player.open), 'player open for skip test');
+  await pg.evaluate(() => { N.player.paused = false; window.__seeks.length = 0; window.__l.oncurrentplaytime(10000); }); await sleep(600);
+  const sk = () => pg.evaluate(() => { const b = document.getElementById('skip-btn'); return { show: b.classList.contains('show'), focus: b.classList.contains('focus'), txt: b.textContent, paused: N.player.paused, seeks: window.__seeks.slice() }; });
+  let k1 = await sk(); console.log('skip', JSON.stringify(k1)); ok(k1.show && !k1.focus && /^▲/.test(k1.txt), 'pill shown, not focused, hint ▲');
+  await shot('12-skip-pill');
+  await key('Enter', 400); k1 = await sk(); ok(k1.paused && !k1.seeks.length, 'OK toggles pause, does not skip');
+  await key('Enter', 400);
+  await key('Up', 500); k1 = await sk(); ok(k1.focus && !(await pg.evaluate(() => N.player.menuOpen)), 'Up focuses the pill (no menu)'); await shot('13-skip-focused');
+  await key('Back', 400); k1 = await sk(); ok(!k1.focus && (await st()).playing, 'Back releases the pill, stays in player');
+  await key('Up', 400); await key('Down', 400); k1 = await sk(); ok(!k1.focus, 'Down releases the pill');
+  await key('Up', 400); await key('Enter', 400); k1 = await sk(); ok(k1.seeks.indexOf(30000) >= 0, 'OK on focused pill skips to intro end');
+  // up next: not activated by OK
+  await pg.evaluate(() => { window.__l.oncurrentplaytime(0); N.player.showUpNext(); }); await sleep(300);
+  const un = () => pg.evaluate(() => ({ f: document.querySelectorAll('#upnext .focus').length, idx: N.player.index, shown: document.getElementById('upnext').classList.contains('show') }));
+  let u = await un(); const i0 = u.idx; ok(u.shown && u.f === 0, 'Up Next shown without focus');
+  await key('Enter', 500); u = await un(); ok(u.idx === i0, 'OK does not start next episode');
+  await key('Up', 400); u = await un(); ok(u.f === 1, 'Up focuses Up Next'); await shot('14-upnext-focused');
+  await key('Enter', 900); u = await un(); ok(u.idx === i0 + 1, 'OK on focused Up Next plays next');
+  await key('Back', 500); await key('Back', 500); await key('Back', 900); s = await st(); ok(!s.playing, 'player closed');
+  // --- rail collapses whenever focus leaves it
+  const rail = () => pg.evaluate(() => ({ open: N.rail.open, cls: document.getElementById('rail').classList.contains('open'), cur: N.nav.cur && N.nav.cur.className }));
+  await key('Back', 700); await key('Left', 700); let r = await rail(); ok(r.open && r.cls, 'rail opens on Left at the edge'); await shot('15-rail-open');
+  await key('Right', 600); r = await rail(); ok(!r.open && !r.cls, 'Right collapses rail');
+  await key('Left', 700); await pg.evaluate(() => { const t = document.querySelector('.btn.f, .card.f, .ep.f'); console.log('target', t && t.className, document.querySelector('.screen') && document.querySelector('.screen').className); const e = new MouseEvent('mousemove', { bubbles: true, movementX: 5, movementY: 5 }); t.dispatchEvent(e); }); await sleep(500); r = await rail(); console.log('after pointer', JSON.stringify(r)); ok(!r.open && !r.cls, 'pointer onto content collapses rail');
+  await key('Left', 700); await pg.evaluate(() => N.player.start(null || {id:1,title:{english:'x'}}, N.player.items, 0, null)); await sleep(500); r = await rail(); ok(!r.open && !r.cls, 'rail collapsed when playback starts');
+  await pg.evaluate(() => N.player.close()); await sleep(400); r = await rail(); ok(!r.cls, 'rail still collapsed after player closes');
   console.log('errors', errs.slice(0, 5)); console.log(fails ? 'FAILED ' + fails : 'ALL PASS');
   await b.close(); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
