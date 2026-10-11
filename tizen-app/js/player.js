@@ -192,7 +192,7 @@
   };
   function seriesLine(item, i) {
     var info = item.info || {};
-    if (P.items.length > 1 || info.season) return 'S' + (info.season || 1) + ' · E' + (info.episode || (i + 1)) + (N.ui.epName(item) ? ' — ' + N.ui.epName(item) : '');
+    if (P.items.length > 1 || info.season) return 'S' + (info.season || 1) + ' · E' + N.ui.epLabel(info.episode, i + 1) + (N.ui.epName(item) ? ' — ' + N.ui.epName(item) : '');
     return '';
   }
   P.playIndex = function (i) {
@@ -297,6 +297,10 @@
       if (!P.paused && !P.menuOpen && !epsOpen) { $('osd').classList.add('off'); $('player').classList.remove('osd-on'); $('scrub').classList.remove('act'); }
     }, 4000);
   };
+  P.hideChrome = function () {
+    clearTimeout(P.osdTimer); $('osd').classList.add('off'); $('player').classList.remove('osd-on'); $('scrub').classList.remove('act');
+    if ($('upnext').classList.contains('show')) P.hideUpNext(); // keeps autoplay countdown semantics: dismissed
+  };
   P.glyph = function (kind) { // kind: 'play' | 'pause' | false
     var g = $('pglyph'); clearTimeout(glyphT);
     g.classList.remove('pulse', 'hold');
@@ -331,7 +335,7 @@
     var u = $('upnext'), auto = N.store.get('autoplay', true);
     var info = next.info || {};
     u.querySelector('.u1').textContent = N.t('nextEpisode');
-    u.querySelector('.u2').textContent = 'S' + (info.season || 1) + ' · E' + (info.episode || (P.index + 2));
+    u.querySelector('.u2').textContent = 'S' + (info.season || 1) + ' · E' + N.ui.epLabel(info.episode, P.index + 2);
     u.querySelector('.u3').textContent = N.ui.epName(next) || N.title(P.post);
     var cv = N.ui.coverUrl(P.post) || N.ui.posterUrl(P.post);
     u.querySelector('.th').style.backgroundImage = cv ? 'url("' + cv + '")' : '';
@@ -416,7 +420,12 @@
       if (k === K.BACK || k === K.ESC || k === K.BACKSPACE || k === K.DOWN) { P.closeEps(); return true; }
       return false;
     }
-    if (k === K.BACK || k === K.ESC || k === K.BACKSPACE || k === K.STOP) { P.close(); return true; }
+    if (k === K.BACK || k === K.ESC || k === K.BACKSPACE) {
+      // Back first dismisses whatever is on screen (controls / up-next card); only a bare player exits
+      if (!$('osd').classList.contains('off') || $('upnext').classList.contains('show')) { P.hideChrome(); return true; }
+      P.close(); return true;
+    }
+    if (k === K.STOP) { P.close(); return true; }
     P.showOsd();
     if (unState && $('upnext').classList.contains('show')) {
       if (k === K.ENTER) {

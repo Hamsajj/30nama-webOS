@@ -121,7 +121,7 @@
       var c = x0.continue_watching || x0, t = Number(c.time || c.position || 0), d = Number(c.duration || 0);
       var season = c.season || (c.info && c.info.season), ep = c.episode || (c.info && c.info.episode);
       var parts = [];
-      if (season && ep) parts.push('S' + season + ' · E' + ep);
+      if (season && ep) parts.push('S' + season + ' · E' + N.ui.epLabel(ep));
       if (d && t) parts.push(Math.max(1, Math.round((d - t) / 60)) + ' ' + N.t('minLeft'));
       return { prog: d ? Math.min(1, t / d) : 0, label: parts.join(' · ') };
     }
@@ -421,10 +421,7 @@
     function render(post, st) {
       root.removeChild(sk);
       var items = (st && st.hls ? st.hls.slice() : []);
-      items.sort(function (a, b) {
-        var ai = a.info || {}, bi = b.info || {};
-        return ((+ai.season || 0) - (+bi.season || 0)) || ((+ai.episode || 0) - (+bi.episode || 0));
-      });
+      items.sort(ui.epCmp);
       var resume = st && st.continue_watching && st.continue_watching.file_id ? st.continue_watching : null;
       var po = post.options || {}, isSeries = !!po.is_series;
       var tmOn = N.tmdb.enabled(), dpage = el('div', 'd-page'), col = el('div', 'det-col');
@@ -451,7 +448,7 @@
         N.player.start(post, items, i, withResume ? resume : null);
       }
       var info0 = items[startIdx] && items[startIdx].info || {};
-      var playLabel = resume ? N.t('resume') + (isSeries ? ' S' + (info0.season || 1) + '·E' + (info0.episode || startIdx + 1) : '') : N.t('play');
+      var playLabel = resume ? N.t('resume') + (isSeries ? ' S' + (info0.season || 1) + '·E' + ui.epLabel(info0.episode, startIdx + 1) : '') : N.t('play');
       var playB;
       if (items.length) playB = ui.btn(playLabel, function () { play(startIdx, true); }, 'primary', 'play');
       else playB = ui.btn(N.t('play'), function () { N.toast(N.isLoggedIn() ? N.t('noStream') : N.t('playLogin'), 3500); }, 'primary', 'play');

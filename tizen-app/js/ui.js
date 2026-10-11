@@ -70,7 +70,6 @@
     var b = null;
     if (po.coming_soon) { b = el('div', 'bdg soon', N.t('soon')); }
     else if (po.free_stream) { b = el('div', 'bdg free', N.t('free')); }
-    else if (po.persian_subtitle) { b = el('div', 'bdg', N.t('sub')); }
     if (b) c.appendChild(b);
   };
   // grid cell: poster + title under it. Returns the cell; cell.card is the focusable.
@@ -84,9 +83,19 @@
     if (t && typeof t === 'object') t = (N.lang === 'fa' && t.local) ? t.local : (t.english || t.local);
     return t ? String(t) : '';
   };
+  // episode numbers may be combined ("11,12"): order by the leading number, show "11–12"
+  ui.epNum = function (v) { var n = parseInt(String(v === undefined || v === null ? '' : v), 10); return isNaN(n) ? 0 : n; };
+  ui.epLabel = function (v, fallback) {
+    var s = (v === undefined || v === null || v === '') ? String(fallback === undefined ? '' : fallback) : String(v);
+    return s.replace(/\s*[,&+\-–]\s*/g, '–');
+  };
+  ui.epCmp = function (a, b) {
+    var ai = (a && a.info) || {}, bi = (b && b.info) || {};
+    return (ui.epNum(ai.season) - ui.epNum(bi.season)) || (ui.epNum(ai.episode) - ui.epNum(bi.episode));
+  };
   ui.epTile = function (it, idx, o) {
-    o = o || {}; var i = it.info || {}, n = i.episode || (idx + 1), e = el('div', 'ep f');
-    e.appendChild(el('div', 'en tab', 'E' + (n < 10 ? '0' + n : n)));
+    o = o || {}; var i = it.info || {}, n = ui.epLabel(i.episode, idx + 1), e = el('div', 'ep f');
+    e.appendChild(el('div', 'en tab' + (n.length > 3 ? ' sm' : ''), 'E' + (/^\d$/.test(n) ? '0' + n : n)));
     e.appendChild(el('div', 'et', ui.epName(it) || (N.t('episode') + ' ' + n)));
     var dur = Number(i.duration || i.time || 0);
     if (o.watched) { var ck = ui.icon('check', 'chk'); e.appendChild(ck); }

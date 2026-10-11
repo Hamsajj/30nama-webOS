@@ -4,10 +4,10 @@ const SHOTS = path.join(__dirname, '..', 'design', 'shots'); fs.mkdirSync(SHOTS,
 const KEYS = { Up: 38, Down: 40, Left: 37, Right: 39, Enter: 13, Esc: 27, Back: 10009 };
 const mock = () => {
   const SEA = [15, 18, 16, 22], items = [];
-  SEA.forEach((n, si) => { for (let e = 1; e <= n; e++) items.push({
-    info: { file_id: String((si + 1) * 100 + e), post_id: '77', season: String(si + 1), episode: String(e), title: { english: 'Episode title ' + (si + 1) + 'x' + e + (e % 4 == 0 ? ' with a much longer name that wraps' : '') } },
+  SEA.forEach((n, si) => { for (let e = 1; e <= n; e++) { if (si === 3 && e === 12) continue; const ep = (si === 3 && e === 11) ? '11,12' : String(e); items.push({
+    info: { file_id: String((si + 1) * 100 + e), post_id: '77', season: String(si + 1), episode: ep, title: { english: 'Episode title ' + (si + 1) + 'x' + e + (e % 4 == 0 ? ' with a much longer name that wraps' : '') } },
     options: { token: 't', intro_start: '00:00:05', intro_end: '00:00:30' },
-    file: { m3u8: [{ label: 'Auto', default: 'http://x/auto.m3u8' }, { label: '720p', default: 'http://x/720.m3u8' }, { label: '1080p', default: 'http://x/' + ((si + 1) * 100 + e) + '.m3u8' }], subtitle: {} } }); });
+    file: { m3u8: [{ label: 'Auto', default: 'http://x/auto.m3u8' }, { label: '720p', default: 'http://x/720.m3u8' }, { label: '1080p', default: 'http://x/' + ((si + 1) * 100 + e) + '.m3u8' }], subtitle: {} } }); } });
   window.__opened = [];
   const dur = 2400000;
   window.webapis = { avplay: { open: u => window.__opened.push(u), close() {}, stop() {}, play() {}, pause() {}, seekTo() {}, getDuration: () => dur,
@@ -59,7 +59,7 @@ const mock = () => {
   ok(/\/313\.m3u8/.test(await lastOpened()), 'played S3E13 (' + (await lastOpened()) + ')');
   ok(s.playing, 'player open'); ok(s.sheetVisible !== 'visible', 'sheet hidden while playing (visibility=' + s.sheetVisible + ', scopes=' + s.scopes + ')');
   await shot('04-playing');
-  await key(BACK, 900); s = await st();
+  await key(BACK, 900); s = await st(); ok(s.playing, 'first Back only hides the OSD'); await key(BACK, 900); s = await st();
   ok(!s.playing, 'player closed'); await shot('05-back-from-player');
   console.log('after back:', JSON.stringify(s));
   ok(s.eps && /3/.test(s.season || ''), 'sheet restored on season 3');
@@ -73,7 +73,7 @@ const mock = () => {
   const o = await lastOpened(); console.log('focused', f, 'played', o);
   const want = /(\d+)/.exec(f.split('|')[1] || '');
   ok(want && new RegExp('/3' + String(want[1]).padStart(2, '0') + '\\.m3u8').test(o), 'Enter played the focused episode');
-  await key('Esc', 800); s = await st(); ok(!s.playing && s.eps, 'back again restores sheet');
+  await key('Esc', 600); await key('Esc', 800); s = await st(); ok(!s.playing && s.eps, 'back again restores sheet');
 
   // --- in-player episodes sheet, Back via the real TV key (10009)
   s = await st(); await key('Enter', 1200); ok((await st()).playing, 'playing again');
@@ -81,7 +81,7 @@ const mock = () => {
   await key('Right', 400); await key('Right', 600); await shot('09-player-eps-moved');
   const fp = (await st()).cur; await key('Enter', 1200); console.log('player sheet picked', fp, 'opened', await lastOpened());
   ok((await lastOpened()).endsWith("/3" + String(fp.split("|")[1].slice(1,3)) + ".m3u8"), "in-player sheet plays the focused tile");
-  await key('Back', 900); s = await st(); ok(!s.playing && s.eps && s.inDom, 'Back (10009) returns to sheet'); console.log('restored on', s.cur, s.season);
+  await key('Back', 600); await key('Back', 900); s = await st(); ok(!s.playing && s.eps && s.inDom, 'Back (10009) returns to sheet'); console.log('restored on', s.cur, s.season);
   // --- rapid season hop then Down
   await key('Up', 300); await key('Right', 20); await key('Down', 700); s = await st(); console.log('hop ->', s.season, s.cur, s.rect);
   ok(/4/.test(s.season) && /E0?1/.test(s.cur) && s.rect[0] >= 0, 'rapid Right+Down lands on S4 first tile');
@@ -90,8 +90,30 @@ const mock = () => {
   await pg.evaluate(() => { N.player.index = N.player.items.findIndex(i => i.info.file_id === '316'); N.player.onEnded(); }); await sleep(800);
   ok((await lastOpened()).endsWith("/401.m3u8"), 'autoplay S3E16 -> S4E01');
   await pg.evaluate(() => N.player.playIndex(N.player.items.findIndex(i => i.info.file_id === '102'))); await sleep(500);
-  await key('Esc', 900); s = await st(); console.log('after autoplay-ish back', s.season, s.cur);
+  await key('Esc', 600); await key('Esc', 900); s = await st(); console.log('after autoplay-ish back', s.season, s.cur);
   ok(/1/.test(s.season) && /E02/.test(s.cur) && s.eps, 'Back restores the episode last played (S1E02)'); await shot('10-restored-s1');
+
+  // --- ordering with a combined episode, and Back layering
+  await key('Up', 300); await key('Right', 300); await key('Right', 300); await key('Right', 300);
+  await sleep(500);
+  const order = await pg.evaluate(() => Array.from(document.querySelectorAll('.det .eptrack .ep .en')).map(e => e.textContent));
+  console.log('S4 order', order.join(' '));
+  ok(order.indexOf('E11–12') === 10 && order[9] === 'E10' && order[11] === 'E13' && order[0] === 'E01', 'S4 sorted numerically, combined episode between E10 and E13');
+  await shot('11-s4-combined');
+  const plist = await pg.evaluate(() => N.player.items.slice(0, 0).length); 
+  await key('Down', 500); await key('Enter', 1200); ok((await st()).playing, 'playing S4E01');
+  const osdOff = () => pg.evaluate(() => document.getElementById('osd').classList.contains('off'));
+  ok(!(await osdOff()), 'OSD visible after start');
+  await key('Up', 500); ok(await pg.evaluate(() => N.player.menuOpen), 'audio/subs menu open');
+  await key(BACK, 500); s = await st(); ok(s.playing && !(await pg.evaluate(() => N.player.menuOpen)), 'Back closes menu only');
+  await key('Down', 700); await key('Back', 500); s = await st(); ok(s.playing, 'Back closes in-player episodes only');
+  await key(BACK, 500); s = await st(); ok(s.playing, 'Back hides OSD, still playing'); ok(await osdOff(), 'OSD hidden');
+  await key('Back', 900); s = await st(); ok(!s.playing, 'Back with nothing shown exits (10009)');
+  // next-episode order across the combined ep: play S4E10 then onEnded -> 411
+  await pg.evaluate(() => { N.player.playIndex(N.player.items.findIndex(i => i.info.file_id === '410')); N.player.onEnded(); }); await sleep(600);
+  ok((await lastOpened()).endsWith('/411.m3u8'), 'next after E10 is E11-12');
+  await pg.evaluate(() => N.player.onEnded()); await sleep(600);
+  ok((await lastOpened()).endsWith('/413.m3u8'), 'next after E11-12 is E13');
   console.log('errors', errs.slice(0, 5)); console.log(fails ? 'FAILED ' + fails : 'ALL PASS');
   await b.close(); process.exit(fails ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
