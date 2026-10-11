@@ -1,0 +1,21 @@
+{
+  "name": "30nama-tizenos",
+  "version": "1.0.0",
+  "description": "Unofficial 30nama client for Samsung Tizen TV (TizenBrew app module).",
+  "packageType": "app",
+  "appName": "30nama",
+  "appPath": "tizen-app/index.html",
+  "keys": [
+    "MediaPlayPause",
+    "MediaPlay",
+    "MediaPause",
+    "MediaStop",
+    "MediaFastForward",
+    "MediaRewind",
+    "ColorF0Red",
+    "ColorF1Green"
+  ],
+  "keywords": ["tizenbrew", "tizen", "samsung", "tv", "30nama"],
+  "repository": { "type": "git", "url": "git+https://github.com/msharifi99/30nama-tizenos.git" },
+  "license": "MIT"
+}

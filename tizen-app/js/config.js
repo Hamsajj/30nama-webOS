@@ -18,8 +18,9 @@ N.config = {
   qrPollMs: 5000,
   qrTimeoutMs: 60000,
   heartbeatMs: 10000,
-  // Dev only: on localhost every outgoing request goes through tools/devserver.js
-  useProxy: (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  // Dev only: on localhost every outgoing request goes through tools/devserver.js.
+  // Not under TizenBrew, which serves the app from http://127.0.0.1:8081/module/... on the TV itself.
+  useProxy: (location.hostname === 'localhost' || location.hostname === '127.0.0.1') && location.pathname.indexOf('/module/') !== 0 && location.port !== '8081'
 };
 N.keys = {
   ENTER: 13, BACK: 10009, LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, ESC: 27, BACKSPACE: 8,

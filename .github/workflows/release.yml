@@ -1,0 +1,83 @@
+name: Release wgt
+
+# On a v* tag: build tizen-app/ into a .wgt signed with a throwaway author
+# certificate generated on the runner, and attach it to a GitHub Release.
+# The package is meant to be RE-SIGNED by the user's installer
+# (e.g. Apps2Samsung) with their own Samsung certificate, so the throwaway
+# cert is discarded after the build. No TMDB token is ever included.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  wgt:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Tizen Studio CLI
+        run: |
+          curl -fsSL -o /tmp/web-cli.bin \
+            https://download.tizen.org/sdk/Installer/tizen-studio_5.6/web-cli_Tizen_Studio_5.6_ubuntu-64.bin
+          chmod +x /tmp/web-cli.bin
+          /tmp/web-cli.bin --accept-license "$HOME/tizen-studio" < /dev/null
+          echo "$HOME/tizen-studio/tools/ide/bin" >> "$GITHUB_PATH"
+
+      - name: Stage sources (no tools/, no token)
+        run: |
+          mkdir -p stage/web
+          cp -r tizen-app/. stage/web/
+          rm -rf stage/web/tools stage/web/js/tmdb-token.js
+          VER="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            sed -i -E "s/(<widget [^>]*version=\")[^\"]*(\")/\1${VER}\2/" stage/web/config.xml
+          fi
+          grep -o 'version="[^"]*"' stage/web/config.xml | head -1
+
+      - name: Build and package with a throwaway author certificate
+        run: |
+          CERT_PW="$(openssl rand -hex 12)"
+          tizen certificate -a 30nama-community -p "$CERT_PW" -f throwaway -- "$PWD/stage"
+          tizen security-profiles add -n ci -a "$PWD/stage/throwaway.p12" -p "$CERT_PW"
+          tizen cli-config "profiles.path=$HOME/tizen-studio-data/profile/profiles.xml"
+          tizen build-web -out "$PWD/stage/out" -- "$PWD/stage/web"
+          mkdir -p dist
+          tizen package -t wgt -s ci -o "$PWD/dist" -- "$PWD/stage/out"
+          ls -l dist
+          rm -f stage/throwaway.p12
+
+      - name: Verify package contents
+        run: |
+          WGT="$(ls dist/*.wgt | head -1)"
+          unzip -l "$WGT"
+          if unzip -l "$WGT" | grep -E 'tmdb-token\.js|/tools/|\.p12|\.pwd'; then echo "forbidden file in wgt"; exit 1; fi
+          unzip -p "$WGT" 'js/*' config.xml index.html | grep -q 'eyJ' && { echo "JWT-like string in wgt"; exit 1; } || true
+          unzip -l "$WGT" | grep -q author-signature.xml
+          unzip -l "$WGT" | grep -q signature1.xml
+          mv "$WGT" "dist/30nama-${GITHUB_REF_NAME}.wgt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 30nama-wgt
+          path: dist/*.wgt
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.wgt
+          generate_release_notes: true
+          body: |
+            Prebuilt `.wgt` for Samsung Tizen TVs. It is NOT signed for your TV:
+            install it with an installer that re-signs with your own certificate
+            (see the README, Option 2). Also installable as a TizenBrew module.
