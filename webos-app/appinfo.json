@@ -1,0 +1,14 @@
+{
+  "id": "com.30nama.app.webos",
+  "title": "30nama",
+  "type": "web",
+  "main": "index.html",
+  "icon": "icon-80.png",
+  "largeIcon": "icon-130.png",
+  "version": "1.0.0",
+  "vendor": "30nama",
+  "description": "Unofficial 30nama client for LG webOS TV",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}
