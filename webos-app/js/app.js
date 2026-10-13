@@ -9,6 +9,7 @@
     ['series', 'series', function () { N.go('archive', { slug: 'series', name: N.t('series') }, { reset: true }); }],
     ['anime', 'anime', function () { N.go('archive', { slug: 'anime', name: N.t('anime') }, { reset: true }); }],
     ['archive', 'archive', function () { N.go('archive', {}, { reset: true }); }],
+    ['tmdbGenres', 'archive', function () { N.go('tmdbGenres', {}, { reset: true }); }],
     ['settings', 'settings', function () { N.go('settings', {}, { reset: true }); }]
   ];
   var ACCT = ['account', 'user', function () { N.go('settings', { section: 'account' }, { reset: true }); }];

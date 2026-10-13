@@ -1,5 +1,6 @@
 # secrets / personal
 tizen-app/js/tmdb-token.js
+webos-app/js/tmdb-token.local.js
 .wizard.env
 *.p12
 *.pwd

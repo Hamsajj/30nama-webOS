@@ -21,7 +21,7 @@
       exitTitle: 'Exit 30nama?', exitBody: 'You can come back any time.', exit: 'Exit', cancel: 'Cancel', logoutTitle: 'Sign out?', logoutBody: 'You will need to scan a new code to sign in again.',
       hintPlayer: '▲ Audio & subtitles  ·  OK Play/Pause', hintPlayerEps: '▲ Audio & subtitles  ·  OK Play/Pause  ·  ▼ Episodes',
       welcome: 'Welcome', subFailed: 'Subtitle failed', playErr: 'Playback error',
-      trendingWeek: 'Trending this week', newSeries: 'New & returning series', popularMovies: 'Popular movies now', trendingNow: 'Trending',
+      trendingWeek: 'Trending this week', newSeries: 'New & returning series', latestPopularSeries: 'Latest popular series', latestPopularMovies: 'Latest popular movies', tmdbGenres: 'Genre picks', genrePicks: 'Choose a genre', genreAction: 'Action', genreComedy: 'Comedy', genreDrama: 'Drama', genreThriller: 'Thriller & mystery', genreAnimation: 'Animation', genreSciFi: 'Sci-Fi & fantasy', popularMovies: 'Popular movies now', trendingNow: 'Trending',
       crew: 'Crew', reviews: 'Reviews', moreLikeThis: 'More like this', nextEp: 'Next episode', newSeason: 'New season', close: 'Close', tmdb: 'TMDB metadata', tmdbOn: 'Connected', tmdbMock: 'Mock data', tmdbOff: 'Not configured', clearCache: 'Clear metadata cache', cleared: 'Cache cleared', tmdbCredit: 'Movie data from TMDB. Not endorsed or certified by TMDB.',
       Creator: 'Creator', Director: 'Director', Writer: 'Writer', Composer: 'Composer', 'Executive Producer': 'Executive producer', readMore: 'OK to read', scrollHint: '▲ ▼ scroll'
     },
@@ -46,7 +46,7 @@
       exitTitle: 'خروج از ۳۰نما؟', exitBody: 'هر زمان بخواهید می‌توانید برگردید.', exit: 'خروج', cancel: 'انصراف', logoutTitle: 'خروج از حساب؟', logoutBody: 'برای ورود دوباره باید کد جدیدی اسکن کنید.',
       hintPlayer: '▲ صدا و زیرنویس  ·  OK پخش/توقف', hintPlayerEps: '▲ صدا و زیرنویس  ·  OK پخش/توقف  ·  ▼ قسمت‌ها',
       welcome: 'خوش آمدید', subFailed: 'خطا در زیرنویس', playErr: 'خطای پخش',
-      trendingWeek: 'پرطرفدار این هفته', newSeries: 'سریال‌های جدید و ادامه‌دار', popularMovies: 'فیلم‌های محبوب امروز', trendingNow: 'پرطرفدار',
+      trendingWeek: 'پرطرفدار این هفته', newSeries: 'سریال‌های جدید و ادامه‌دار', latestPopularSeries: 'سریال‌های محبوب تازه', latestPopularMovies: 'فیلم‌های محبوب تازه', tmdbGenres: 'انتخاب ژانر', genrePicks: 'یک ژانر انتخاب کنید', genreAction: 'اکشن', genreComedy: 'کمدی', genreDrama: 'درام', genreThriller: 'هیجان‌انگیز و معمایی', genreAnimation: 'انیمیشن', genreSciFi: 'علمی‌تخیلی و فانتزی', popularMovies: 'فیلم‌های محبوب امروز', trendingNow: 'پرطرفدار',
       crew: 'عوامل', reviews: 'نقد و نظر', moreLikeThis: 'مشابه این', nextEp: 'قسمت بعد', newSeason: 'فصل جدید', close: 'بستن', tmdb: 'اطلاعات TMDB', tmdbOn: 'متصل', tmdbMock: 'داده آزمایشی', tmdbOff: 'تنظیم نشده', clearCache: 'پاک کردن حافظه نهان', cleared: 'پاک شد', tmdbCredit: 'اطلاعات فیلم‌ها از TMDB. مورد تأیید TMDB نیست.',
       Creator: 'سازنده', Director: 'کارگردان', Writer: 'نویسنده', Composer: 'آهنگساز', 'Executive Producer': 'تهیه‌کننده اجرایی', readMore: 'OK برای خواندن', scrollHint: '▲ ▼ پیمایش'
     }

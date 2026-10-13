@@ -69,7 +69,7 @@
     var m;
     if (/^\/trending\//.test(path)) return 'trending';
     if (/^\/tv\/on_the_air/.test(path) || /^\/discover\/tv/.test(path)) return 'on_the_air';
-    if (/^\/movie\/now_playing/.test(path)) return 'now_playing';
+    if (/^\/movie\/now_playing/.test(path) || /^\/discover\/movie/.test(path)) return 'now_playing';
     if ((m = /^\/search\/(movie|tv)/.exec(path))) return 'search_' + m[1];
     if (/^\/find\//.test(path)) return 'find';
     if (/^\/(movie|tv)\/\d+\/images/.test(path)) return 'images';
@@ -244,7 +244,14 @@
     p.then(j.res, j.rej).then(function () { active--; pump(); });
     pump();
   }
-  function pool(fn) { return new Promise(function (res, rej) { q.push({ fn: fn, res: res, rej: rej }); pump(); }); }
+  function pool(fn, priority) {
+    return new Promise(function (res, rej) {
+      var job = { fn: fn, res: res, rej: rej, priority: priority || 0 }, i = 0;
+      while (i < q.length && q[i].priority >= job.priority) i++;
+      q.splice(i, 0, job); // Interactive discovery should not wait behind background Home enrichment.
+      pump();
+    });
+  }
   function retrying(fn, tries) {
     return fn().catch(function (e) {
       if (tries > 0 && /bad json|timeout|429/.test(e && e.message || '')) {
@@ -288,7 +295,7 @@
   }
   var rin = {};
   // it: slim TMDB item {id, kind, title, orig, year}; alive(): optional, false -> skipped (resolves null, uncached)
-  T.resolve = function (it, alive) {
+  T.resolve = function (it, alive, priority) {
     var key = 'r2.' + it.kind + it.id;
     var c = cget(key, function (e) { return e.v ? TTL.res : TTL.miss; });
     if (c) return Promise.resolve(c.v ? Object.assign({}, c.v) : null);
@@ -296,7 +303,7 @@
     var p = pool(function () {
       if (alive && !alive()) return { skipped: true };
       return retrying(function () { return resolveNet(it); }, 2).then(function (post) { return { post: post }; });
-    }).then(function (r) {
+    }, priority).then(function (r) {
       delete rin[key];
       if (r.skipped) return null;
       var sp = r.post ? slimPost(r.post) : null; cput(key, sp || 0); return sp;
@@ -308,34 +315,66 @@
   /* ---------- home feeds ---------- */
   var SRC = {
     trend: [{ path: '/trending/all/week', params: { language: 'en-US' }, dk: null }],
-    fresh: function () {
-      var d = new Date(Date.now() - 30 * 86400000), ds = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2), out = [];
+    series: function () {
+      var d = new Date(Date.now() - 180 * 86400000), ds = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2), out = [];
       for (var pg = 1; pg <= 3; pg++) {
         out.push({ path: '/discover/tv', params: { language: 'en-US', 'air_date.gte': ds, sort_by: 'popularity.desc', 'vote_count.gte': 200, without_genres: '10767,10763,10764,10766', page: pg }, dk: 'tv' });
       }
       return out;
     },
-    pop: [{ path: '/movie/now_playing', params: { language: 'en-US', region: 'US' }, dk: 'movie' }, { path: '/trending/movie/day', params: { language: 'en-US' }, dk: 'movie' }]
+    latest: function () {
+      var now = new Date(), d = new Date(now.getTime() - 180 * 86400000);
+      var start = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+      var end = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2) + '-' + ('0' + now.getDate()).slice(-2), out = [];
+      for (var pg = 1; pg <= 3; pg++) {
+        out.push({ path: '/discover/movie', params: { language: 'en-US', 'primary_release_date.gte': start, 'primary_release_date.lte': end, sort_by: 'popularity.desc', 'vote_count.gte': 100, page: pg }, dk: 'movie' });
+      }
+      return out;
+    }
   };
-  var CAP = { trend: 16, fresh: 14, pop: 14 };
+  var GENRES = [
+    { key: 'action', titleKey: 'genreAction', movie: '28', tv: '10759' },
+    { key: 'comedy', titleKey: 'genreComedy', movie: '35', tv: '35' },
+    { key: 'drama', titleKey: 'genreDrama', movie: '18', tv: '18' },
+    { key: 'thriller', titleKey: 'genreThriller', movie: '53', tv: '9648' },
+    { key: 'animation', titleKey: 'genreAnimation', movie: '16', tv: '16' },
+    { key: 'scifi', titleKey: 'genreSciFi', movie: '878', tv: '10765' }
+  ];
+  var CAP = { trend: 16, series: 14, latest: 14 };
+  T.genres = function () { return GENRES.slice(); };
+  T.genreFeed = function (key) { return T.feed('genre:' + key); };
+  function sourcesFor(name) {
+    if (name.indexOf('genre:') === 0) {
+      var key = name.slice(6), g = null;
+      GENRES.forEach(function (x) { if (x.key === key) g = x; });
+      if (!g) return [];
+      var out = [];
+      for (var pg = 1; pg <= 4; pg++) {
+        out.push({ path: '/discover/movie', params: { language: 'en-US', with_genres: g.movie, sort_by: 'popularity.desc', 'vote_count.gte': 100, page: pg }, dk: 'movie' });
+        out.push({ path: '/discover/tv', params: { language: 'en-US', with_genres: g.tv, sort_by: 'popularity.desc', 'vote_count.gte': 100, page: pg }, dk: 'tv' });
+      }
+      return out;
+    }
+    return typeof SRC[name] === 'function' ? SRC[name]() : (SRC[name] || []);
+  }
   var feeds = {};
   function makeFeed(name) {
-    var f = { name: name, t: Date.now(), items: [], done: false, subs: [], dead: false };
+    var genre = name.indexOf('genre:') === 0, cap = genre ? 30 : (CAP[name] || 14), f = { name: name, t: Date.now(), items: [], done: false, subs: [], dead: false };
     function notify() { f.subs.slice().forEach(function (fn) { try { fn(f); } catch (e) {} }); }
     function finish() { f.done = true; notify(); }
-    var srcs = typeof SRC[name] === 'function' ? SRC[name]() : SRC[name];
+    var srcs = sourcesFor(name);
     Promise.all(srcs.map(function (s) {
       return T.get(s.path, s.params, { ttl: TTL.trend, slim: listSlim(s.dk) }).catch(function () { return []; });
     })).then(function (lists) {
       var seen = {}, cands = [];
       lists.forEach(function (l) { l.forEach(function (it) { var k = it.kind + it.id; if (!seen[k] && it.title && it.pst) { seen[k] = 1; cands.push(it); } }); });
-      // fresh series: most popular (well-known) first, obscure titles dropped
-      if (name === 'fresh') { cands = cands.filter(function (c) { return c.vc >= 200; }); cands.sort(function (a, b) { return (b.pop + Math.sqrt(b.vc) / 5) - (a.pop + Math.sqrt(a.vc) / 5); }); }
+      // Recent series: favor well-known titles over obscure, newly aired entries.
+      if (name === 'series') { cands = cands.filter(function (c) { return c.vc >= 200; }); cands.sort(function (a, b) { return (b.pop + Math.sqrt(b.vc) / 5) - (a.pop + Math.sqrt(a.vc) / 5); }); }
       if (!cands.length) return finish();
       var left = cands.length;
       cands.forEach(function (it, i) {
-        T.resolve(it, function () { return f.items.length < CAP[name]; }).then(function (post) {
-          if (post && f.items.length < CAP[name]) {
+        T.resolve(it, function () { return f.items.length < cap; }, genre ? 1 : 0).then(function (post) {
+          if (post && f.items.length < cap) {
             post._tm = { id: it.id, kind: it.kind }; post._bd = it.bd ? IMG + 'w1280' + it.bd : '';
             f.items.push({ post: post, tm: it, i: i }); notify();
           }
@@ -352,7 +391,7 @@
     if (f && Date.now() - f.t < 10 * 60 * 1000 && !(f.done && !f.items.length)) return f;
     return (feeds[name] = makeFeed(name));
   };
-  T.startHome = function () { T.feed('trend'); T.feed('fresh'); T.feed('pop'); };
+  T.startHome = function () { T.feed('trend'); T.feed('series'); T.feed('latest'); };
   // Resolves with up to `n` trending posts that have a TMDB backdrop (fewer on timeout); never rejects.
   T.heroes = function (n, ms) {
     return new Promise(function (res) {

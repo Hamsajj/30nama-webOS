@@ -29,7 +29,7 @@
 
   /* ================= QR login ================= */
   S.login = function (root) {
-    var dead = false, pollT = null, startT = 0, code = null;
+    var dead = false, pollT = null, retryT = null, startT = 0, code = null, generation = 0;
     root.classList.add('login');
     N.stage.dim(0.55);
     var col = el('div', 'col'); root.appendChild(col);
@@ -42,8 +42,7 @@
     (function () { var parts = N.t('orVisit').split('30nama.com/auth'); alt.appendChild(document.createTextNode(parts[0])); alt.appendChild(el('span', 'latin', '30nama.com/auth')); alt.appendChild(document.createTextNode(parts[1] || '')); })();
     alt.appendChild(codeEl); col.appendChild(alt);
     var acts = el('div', 'acts'), guestB = ui.btn(N.t('guest'), function () { cleanup(); N.go('home', {}, { reset: true }); }, 'primary');
-    var newB = ui.btn(N.t('refresh'), function () { cleanup(); dead = false; begin(); }, '');
-    acts.appendChild(guestB); acts.appendChild(newB); col.appendChild(acts);
+    acts.appendChild(guestB); col.appendChild(acts);
     var tile = el('div', 'qr-tile'), qrBox = el('div', 'qr'), okBox = el('div', 'ok'), exp = el('div', 'exp', N.t('expired'));
     okBox.appendChild(ui.icon('check')); tile.appendChild(qrBox); tile.appendChild(exp); tile.appendChild(okBox); root.appendChild(tile);
     var status = el('div', 'qr-status'); status.appendChild(el('i')); var stTxt = el('span', '', N.t('waiting')); status.appendChild(stTxt); root.appendChild(status);
@@ -57,23 +56,25 @@
       if (p) N.stage.show(p, { immediate: true, done: function () { N.splashReady(); } }); else N.splashReady();
     }).catch(function () { N.splashReady(); });
 
-    function cleanup() { dead = true; clearInterval(pollT); }
+    function cleanup() { dead = true; generation++; clearInterval(pollT); clearTimeout(retryT); }
     function begin() {
+      var current = ++generation;
+      clearInterval(pollT); clearTimeout(retryT);
       tile.classList.remove('dim', 'done'); qrBox.innerHTML = ''; codeEl.textContent = ''; status.style.visibility = 'visible';
       N.api.get('qrlogin_code').then(function (r) {
-        if (dead) return;
+        if (dead || current !== generation) return;
         code = r.code; var link = r.url || (N.config.qrBase + code);
         var qr = qrcode(0, 'M'); qr.addData(link); qr.make();
         qrBox.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
         codeEl.textContent = code;
         startT = Date.now(); clearInterval(pollT);
         pollT = setInterval(function () {
-          if (dead) return;
+          if (dead || current !== generation) return;
           if (Date.now() - startT > N.config.qrTimeoutMs) { // expired
-            clearInterval(pollT); tile.classList.add('dim'); status.style.visibility = 'hidden'; N.nav.focus(newB, true); return;
+            begin(); return;
           }
           N.api.call('qrlogin_login', { auth_code: code }).then(function (j) {
-            if (dead || !j || !j.success) return; // CODE_NOT_USED -> keep polling
+            if (dead || current !== generation || !j || !j.success) return; // CODE_NOT_USED -> keep polling
             var u = userObj(j.result);
             var token = u ? u.user_session : (j.result && (j.result.token || j.result.user_session));
             if (!token) return;
@@ -92,7 +93,9 @@
           }).catch(function () {});
         }, N.config.qrPollMs);
       }).catch(function (e) {
-        if (dead) return; tile.classList.add('dim'); exp.textContent = N.t('error'); status.style.visibility = 'hidden'; N.nav.focus(newB, true);
+        if (dead || current !== generation) return;
+        tile.classList.add('dim'); exp.textContent = N.t('error'); status.style.visibility = 'hidden';
+        retryT = setTimeout(function () { if (!dead && current === generation) begin(); }, 3000);
       });
     }
     begin();
@@ -220,7 +223,7 @@
     var tmRows = {}, tmFeeds = [];
     function tmSetup() {
       if (!N.tmdb.enabled()) return;
-      var TD = [['trend', 'trendingWeek', 5], ['fresh', 'newSeries', 5], ['pop', 'popularMovies', 5]];
+      var TD = [['trend', 'trendingWeek', 5], ['series', 'latestPopularSeries', 5], ['latest', 'latestPopularMovies', 5]];
       TD.forEach(function (x) {
         var f = N.tmdb.feed(x[0]); tmFeeds.push(f);
         function cb() {
@@ -232,7 +235,7 @@
             r = tmRows[x[0]] = makeRow(d); r.n = items.length;
             var at = 0; while (at < defs.length && (defs[at].key === 'cw' || defs[at].key.indexOf('tm_') === 0)) at++;
             // keep trend < fresh < pop order
-            var order = { tm_trend: 0, tm_fresh: 1, tm_pop: 2 };
+            var order = { tm_trend: 0, tm_series: 1, tm_latest: 2 };
             at = 0; while (at < defs.length && (defs[at].key === 'cw' || (order[defs[at].key] !== undefined && order[defs[at].key] < order[d.key]))) at++;
             insertRowAt(r, at);
           } else {
@@ -798,6 +801,56 @@
     if (menuCache) show(menuCache);
     else N.api.get('menu').then(function (m) { menuCache = m; show(m); }).catch(function (e) { if (!dead) errorView(root, e, function () { N.go('archive', {}, { replace: true }); }); });
     return { destroy: function () { dead = true; } };
+  };
+
+  /* ================= TMDB genre picks ================= */
+  S.tmdbGenres = function (root) {
+    if (!N.tmdb.enabled()) { errorView(root, new Error(N.t('tmdbOff')), function () { N.go('tmdbGenres', {}, { replace: true }); }); return {}; }
+    root.classList.add('archive'); N.stage.dim(0.72);
+    var box = el('div', 'arch'); root.appendChild(box);
+    box.appendChild(el('div', 'ah head', N.t('genrePicks')));
+    var tiles = el('div', 'tiles'); tiles.style.top = '160px'; box.appendChild(tiles);
+    var all = [], colors = ['#273966', '#63395f', '#4f3e24', '#3d465b', '#29554f', '#4a3865'];
+    N.tmdb.genres().forEach(function (g, i) {
+      var c = ui.card({ id: g.key, title: { english: N.t(g.titleKey) } }, 'tile', { name: N.t(g.titleKey) });
+      c.style.background = 'linear-gradient(135deg,' + colors[i % colors.length] + ',#10131c)';
+      c.onclick = function () { N.go('tmdbGenre', { genre: g.key, title: N.t(g.titleKey) }); };
+      c.onfocus2 = function () { box.reveal(c); };
+      tiles.appendChild(c); all.push(c);
+    });
+    N.nav.focus(all[0], true);
+    return { destroy: function () {} };
+  };
+
+  S.tmdbGenre = function (root, params) {
+    if (!N.tmdb.enabled()) { errorView(root, new Error(N.t('tmdbOff')), function () { N.go('tmdbGenres', {}, { replace: true }); }); return {}; }
+    var dead = false, cells = [], seen = {}, feed = N.tmdb.genreFeed(params.genre), focused = false;
+    root.classList.add('archive', 'gridpage'); N.stage.dim(0.72);
+    var box = el('div', 'arch'); root.appendChild(box);
+    var head = el('div', 'head ah'); head.textContent = params.title || N.t('genres'); var cnt = el('small', 'tab', ''); head.appendChild(cnt); box.appendChild(head);
+    var grid = el('div', 'ggrid'); box.appendChild(grid);
+    box.reveal = function (e) { var ty = ui.vscroll(box, e._cell || e, 260); box.classList.toggle('scrolled', ty < 0); };
+    var skels = [];
+    for (var i = 0; i < 14; i++) { var s = el('div', 'gcell'); s.appendChild(ui.skelCard('grid')); grid.appendChild(s); skels.push(s); }
+    function clearSkels() { skels.forEach(function (s) { if (s.parentNode) s.parentNode.removeChild(s); }); skels = []; }
+    function sync(f) {
+      if (dead) return;
+      var items = f.items.slice().sort(function (a, b) { return a.i - b.i; });
+      if (items.length) clearSkels();
+      items.forEach(function (it) {
+        var p = it.post; if (!p || seen[p.id]) return;
+        seen[p.id] = true;
+        var cell = ui.cell(p), idx = cells.length, c = cell.card;
+        c.onclick = function () { N.go('details', { id: p.id }); };
+        c.onfocus2 = function () { box.reveal(c); for (var k = Math.max(0, idx - 7); k < Math.min(cells.length, idx + 14); k++) ui.load(cells[k].card); };
+        cells.push(cell); grid.appendChild(cell); ui.load(c);
+      });
+      if (cells.length) cnt.textContent = String(cells.length) + ' ' + N.t('results');
+      if (!focused && cells.length) { focused = true; N.nav.focus(cells[0].card, true); }
+      if (f.done && !cells.length) { clearSkels(); grid.appendChild(el('div', 'msg', N.t('nothingFor'))); }
+    }
+    feed.subscribe(sync);
+    return { destroy: function () { dead = true; feed.unsubscribe(sync); } };
   };
 
   var SORTS = [['date', 'newest'], ['favorite', 'popular'], ['update', 'updated']];
