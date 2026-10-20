@@ -435,7 +435,7 @@
       var o = other(post); if (o) col.appendChild(el('div', 'd-alt', o));
       var tagEl = null; if (tmOn) { tagEl = el('div', 'd-tag'); tagEl.dir = 'auto'; col.appendChild(tagEl); }
       var meta = ui.meta(post, 3); meta.classList.add('d-meta'); col.appendChild(meta);
-      var plot = el('div', 'd-plot d-fade', N.plot(post)); col.appendChild(plot);
+      var plot = el('div', 'd-plot d-fade f', N.plot(post)); col.appendChild(plot);
       var btns = el('div', 'd-btns d-fade'); col.appendChild(btns);
       var castEl = null;
       if (post.cast && post.cast.length) { castEl = el('div', 'd-cast d-fade', N.t('cast') + ': ' + post.cast.slice(0, 6).map(function (x) { return x.name; }).join(', ')); col.appendChild(castEl); }
@@ -456,6 +456,10 @@
       btns.appendChild(playB);
       var epB = null;
       if (isSeries && items.length) { epB = ui.btn(N.t('episodes'), function () { openEps(); }, '', 'list'); btns.appendChild(epB); }
+      plot.onnav = function (dir) {
+        if (dir === 'down') return playB;
+        return true;
+      };
 
       /* episodes sheet */
       var sheet = null, tabs = null, wrap = null, track = null, tmeta = null, seasons = [], map = {}, epMem = {}, tileBy = {}, backToSheet = false;

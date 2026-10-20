@@ -4,13 +4,13 @@
   var P = N.player = {
     open: false, items: [], index: 0, post: null, be: null, paused: false,
     cues: [], subLang: 'off', subCache: {}, hbTimer: null, tickTimer: null, osdTimer: null,
-    menuOpen: false, seekAcc: 0, seekTimer: null, skip: null, resume: null
+    menuOpen: false, seekAcc: 0, seekTimer: null, skip: null, resume: null, qualityUrl: null
   };
   var hasAV = function () { return !!(window.webapis && window.webapis.avplay); };
 
   /* ---------- backends ---------- */
   function avBackend() {
-    var av = webapis.avplay, state = { dur: 0, cur: 0 };
+    var av = webapis.avplay, state = { dur: 0, cur: 0, paused: false };
     return {
       name: 'avplay',
       load: function (url, startSec, cb) {
@@ -32,13 +32,15 @@
         av.prepareAsync(function () {
           try { state.dur = av.getDuration() / 1000; } catch (e) {}
           av.play();
+          state.paused = false;
           if (startSec > 5) { try { av.seekTo(Math.floor(startSec * 1000)); } catch (e) {} }
           P.spin(false);
           if (cb) cb();
         }, function (err) { P.onError(String(err)); });
       },
-      play: function () { try { av.play(); } catch (e) {} },
-      pause: function () { try { av.pause(); } catch (e) {} },
+      play: function () { try { av.play(); state.paused = false; } catch (e) { return Promise.reject(e); } return Promise.resolve(); },
+      pause: function () { try { av.pause(); state.paused = true; } catch (e) {} },
+      isPaused: function () { return state.paused; },
       seek: function (sec) { try { state.cur = sec; av.seekTo(Math.max(0, Math.floor(sec * 1000))); } catch (e) {} },
       time: function () { return state.cur; },
       buffered: function () { return 0; },
@@ -75,7 +77,8 @@
           P.spin(false); if (cb) cb();
         }
         v.onwaiting = function () { P.spin(true); };
-        v.onplaying = function () { P.spin(false); };
+        v.onplaying = function () { P.paused = false; P.spin(false); };
+        v.onpause = function () { if (P.open) P.paused = true; };
         v.onended = function () { P.onEnded(); };
         v.onerror = function () { P.onError('video error'); };
         v.onloadedmetadata = go;
@@ -87,8 +90,9 @@
           hls.loadSource(src); hls.attachMedia(v);
         } else { v.src = src; }
       },
-      play: function () { v.play(); },
+      play: function () { return v.play(); },
       pause: function () { v.pause(); },
+      isPaused: function () { return v.paused; },
       seek: function (s) { v.currentTime = Math.max(0, s); },
       time: function () { return v.currentTime || 0; },
       buffered: function () { try { var b = v.buffered, t = v.currentTime || 0; for (var i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && b.end(i) >= t) return b.end(i); } catch (e) {} return 0; },
@@ -115,17 +119,25 @@
     if (e instanceof Array) return entryUrl(e[0]);
     return entryUrl(e['default'] || e.file || e.url || e.src || e.link || e.m3u8 || e.path || e.source);
   }
-  P.pickUrl = function (m) {
-    if (!(m instanceof Array)) return entryUrl(m);
-    // Always prefer the highest fixed quality (e.g. 2160p); Auto only as fallback
-    var best = null, bestH = -1, auto = null, i, e, u;
+  P.qualityOptions = function (m) {
+    if (!(m instanceof Array)) { var one = entryUrl(m); return one ? [{ label: '', url: one, height: 0 }] : []; }
+    var fixed = [], auto = [], seen = {}, i, e, u, label, height;
     for (i = 0; i < m.length; i++) {
       e = m[i]; u = entryUrl(e); if (!u) continue;
-      if (e && /^(auto|خودکار)$/i.test(String(e.label || ''))) { auto = u; continue; }
-      var h = parseInt(String(e && e.label || '').replace(/\D/g, ''), 10) || 0;
-      if (h > bestH) { best = u; bestH = h; }
+      if (seen[u]) continue; seen[u] = true;
+      label = String(e && e.label || '');
+      if (/^(auto|خودکار)$/i.test(label)) { auto.push({ label: label || 'Auto', url: u, height: -1 }); continue; }
+      height = parseInt(label.replace(/\D/g, ''), 10) || 0;
+      fixed.push({ label: label || ('Quality ' + (fixed.length + 1)), url: u, height: height });
     }
-    return best || auto;
+    // Highest fixed rendition first: this is always the initial selection.
+    fixed.sort(function (a, b) { return b.height - a.height; });
+    return fixed.concat(auto);
+  };
+  P.pickUrl = function (m, selectedUrl) {
+    var opts = P.qualityOptions(m), i;
+    for (i = 0; i < opts.length; i++) if (opts[i].url === selectedUrl) return opts[i].url;
+    return opts.length ? opts[0].url : null;
   };
 
   /* ---------- subtitles ---------- */
@@ -179,7 +191,7 @@
   }
 
   /* ---------- lifecycle ---------- */
-  var SCRUB_W = 1728, glyphT = null, unState = null, epsOpen = false;
+  var SCRUB_W = 1728, unState = null, epsOpen = false;
   P.spin = function (on) { $('player-spin').classList.toggle('hidden', !on); };
   P.start = function (post, items, index, resume) {
     if (N.rail && N.rail.open) N.rail.close(false);
@@ -196,20 +208,24 @@
     if (P.items.length > 1 || info.season) return 'S' + (info.season || 1) + ' · E' + N.ui.epLabel(info.episode, i + 1) + (N.ui.epName(item) ? ' — ' + N.ui.epName(item) : '');
     return '';
   }
-  P.playIndex = function (i) {
+  P.playIndex = function (i, resumeAt, keepQuality) {
     var item = P.items[i]; if (!item) return;
     P.reportNow();
     if (P.be) P.be.stop();
     P.index = i; P.paused = false; P.cues = []; P.subLang = N.store.get('sub', 'off');
     $('subtitle').textContent = ''; P.hideSkip(); P.hideUpNext(true); P.closeEps(true);
-    var m3u8 = item.file && P.pickUrl(item.file.m3u8);
+    var source = item.file && item.file.m3u8;
+    if (!keepQuality) P.qualityUrl = null;
+    var m3u8 = P.pickUrl(source, P.qualityUrl);
+    P.qualityUrl = m3u8;
     if (typeof m3u8 === 'string') m3u8 = m3u8.replace(/^\s+|\s+$/g, '');
     if (!m3u8 || typeof m3u8 !== 'string') { var raw = ''; try { raw = JSON.stringify(item.file && item.file.m3u8).slice(0, 160); } catch (e) {} N.toast(N.t('noStream') + ' ' + raw, 6000); return P.close(); }
     $('osd-title').textContent = N.title(P.post);
     $('osd-sub').textContent = seriesLine(item, i);
     $('osd-hint').textContent = P.items.length > 1 ? N.t('hintPlayerEps') : N.t('hintPlayer');
     var start = 0, info = item.info || {};
-    if (P.resume && String(P.resume.file_id) === String(info.file_id)) start = Number(P.resume.time) || 0;
+    if (typeof resumeAt === 'number') start = resumeAt;
+    else if (P.resume && String(P.resume.file_id) === String(info.file_id)) start = Number(P.resume.time) || 0;
     P.resume = null;
     P.be = hasAV() ? avBackend() : videoBackend();
     P.spin(true); P.glyph(false);
@@ -310,19 +326,33 @@
     if ($('upnext').classList.contains('show')) P.hideUpNext(); // keeps autoplay countdown semantics: dismissed
   };
   P.glyph = function (kind) { // kind: 'play' | 'pause' | false
-    var g = $('pglyph'); clearTimeout(glyphT);
+    var g = $('pglyph');
     g.classList.remove('pulse', 'hold');
     if (!kind) return;
     N.ui.setIcon(g.firstChild, kind);
     void g.offsetWidth;
-    if (kind === 'pause') { g.classList.add('pulse'); glyphT = setTimeout(function () { g.classList.remove('pulse'); g.classList.add('hold'); }, 600); }
-    else g.classList.add('pulse');
+    // Transport feedback must always fade out. Keeping the pause glyph visible
+    // after its pulse obscures the video and suggests a stale playback state.
+    g.classList.add('pulse');
   };
   P.togglePause = function () {
     if (!P.be) return;
-    P.paused = !P.paused;
-    if (P.paused) P.be.pause(); else P.be.play();
-    P.glyph(P.paused ? 'pause' : 'play');
+    // Video events can arrive late on TVs. Consult the backend so a stale UI
+    // flag cannot turn a Resume press into another Pause command.
+    var wasPaused = P.be.isPaused ? P.be.isPaused() : P.paused;
+    if (wasPaused) {
+      P.paused = false;
+      var started = P.be.play();
+      if (started && started.catch) started.catch(function () {
+        P.paused = true;
+        P.glyph('play');
+      });
+      P.glyph('pause');
+    } else {
+      P.be.pause();
+      P.paused = true;
+      P.glyph('play');
+    }
     P.showOsd();
   };
   P.seekBy = function (sec) {
@@ -366,7 +396,15 @@
     if (force) unState = null; else if (unState) unState.dismissed = true;
   };
 
-  /* ---------- menu (audio / subs) : end-side sheet ---------- */
+  P.setQuality = function (opt) {
+    if (!opt || opt.url === P.qualityUrl) return;
+    var at = P.be ? P.be.time() : 0;
+    P.qualityUrl = opt.url;
+    // Reloading the rendition is the portable way to switch on both webOS and Tizen.
+    P.playIndex(P.index, at, true);
+  };
+
+  /* ---------- menu (quality / audio / subs) : end-side sheet ---------- */
   P.openMenu = function () {
     var m = $('player-menu'); m.innerHTML = ''; var item = P.items[P.index];
     function section(title, opts, onPick) {
@@ -376,6 +414,11 @@
         b.onclick = function () { onPick(o); P.closeMenu(); };
         m.appendChild(b);
       });
+    }
+    var qualities = P.qualityOptions(item && item.file && item.file.m3u8);
+    if (qualities.length > 1) {
+      qualities.forEach(function (o) { o.sel = o.url === P.qualityUrl; });
+      section(N.t('quality'), qualities, P.setQuality);
     }
     var audio = P.be.audioTracks();
     if (audio.length) section(N.t('audio'), audio, function (o) { P.be.setAudio(o.id); });
@@ -462,8 +505,8 @@
       if (unState.active && (k === K.LEFT || k === K.RIGHT)) { unState.sel = unState.sel === 'play' ? 'cred' : 'play'; uSel(); return true; }
     }
     if (k === K.PLAYPAUSE) { P.togglePause(); return true; }
-    if (k === K.PLAY) { if (P.paused) P.togglePause(); return true; }
-    if (k === K.PAUSE) { if (!P.paused) P.togglePause(); return true; }
+    if (k === K.PLAY) { if (P.be && (P.be.isPaused ? P.be.isPaused() : P.paused)) P.togglePause(); return true; }
+    if (k === K.PAUSE) { if (P.be && !(P.be.isPaused ? P.be.isPaused() : P.paused)) P.togglePause(); return true; }
     if (k === K.ENTER) { P.togglePause(); return true; }
     if (k === K.LEFT) { P.seekBy(-10); return true; }
     if (k === K.RIGHT) { P.seekBy(10); return true; }

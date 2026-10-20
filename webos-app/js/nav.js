@@ -128,9 +128,21 @@
       if (nav.cur) { if (nav.cur.onenter) nav.cur.onenter(); else nav.cur.click(); }
     }
   });
-  // mouse support for desktop testing (only on real pointer movement, so content sliding under a still cursor never steals focus)
-  document.addEventListener('mousemove', function (e) {
-    if (!e.movementX && !e.movementY) return;
-    var t = e.target; while (t && t !== document.body) { if (t.classList && t.classList.contains('f')) { if (t !== nav.cur) nav.focus(t); return; } t = t.parentNode; }
-  });
+  // Magic Remote pointer support. Use client coordinates instead of movementX/Y:
+  // webOS mouse events do not consistently expose the latter on every TV.
+  var pointerX = null, pointerY = null;
+  function focusPointerTarget(t) {
+    while (t && t !== document.body) {
+      if (t.classList && t.classList.contains('f')) { if (t !== nav.cur) nav.focus(t); return; }
+      t = t.parentNode;
+    }
+  }
+  function onPointerMove(e) {
+    var x = e.clientX, y = e.clientY;
+    if (x === pointerX && y === pointerY) return; // do not focus content that slides below a still pointer
+    pointerX = x; pointerY = y; focusPointerTarget(e.target);
+  }
+  document.addEventListener('mousemove', onPointerMove);
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('click', function (e) { focusPointerTarget(e.target); }, true);
 })();

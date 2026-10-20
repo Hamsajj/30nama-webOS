@@ -132,6 +132,17 @@
     N.session = { token: user.user_session, user: user };
     N.store.set('session', N.session);
   };
+  // Refresh the saved profile whenever the service supplies a rotated session token.
+  // This also acts as a light keepalive for backends with rolling session expiry.
+  N.refreshSession = function () {
+    if (!N.isLoggedIn()) return Promise.resolve(null);
+    return api.call('user', {}).then(function (j) {
+      var r = j && j.success && j.result, u = r && (r.user_session ? r : (r.user || null));
+      if (u && u.user_session) N.setSession(u);
+      else if (r && N.session) { N.session.user = Object.assign({}, N.session.user, r); N.store.set('session', N.session); }
+      return N.session;
+    });
+  };
   N.logout = function (silent) {
     var p = N.isLoggedIn() ? api.call('logout', {}).catch(function () {}) : Promise.resolve();
     N.session = null; N.store.del('session');

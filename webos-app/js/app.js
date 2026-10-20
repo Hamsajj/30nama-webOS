@@ -214,14 +214,7 @@
     N.api.init().then(function () {
       rail.build();
       var p = Promise.resolve();
-      if (N.isLoggedIn()) {
-        p = N.api.call('user', {}).then(function (j) {
-          if (j && j.success && j.result) {
-            var u = j.result.user_session ? j.result : (j.result.user || null);
-            if (u && u.user_session) N.setSession(u); else { N.session.user = Object.assign({}, N.session.user, j.result); N.store.set('session', N.session); }
-          }
-        }).catch(function () {});
-      }
+      if (N.isLoggedIn()) p = N.refreshSession().catch(function () {});
       return p;
     }).then(function () {
       if (N.isLoggedIn() || N.store.get('guest', false) === true) N.go('home', {}, { reset: true });
@@ -236,6 +229,13 @@
     r.style.transform = 'scale(' + s + ')'; r.style.transformOrigin = '0 0';
   }
   window.addEventListener('resize', fit);
+
+  // Preserve rolling server sessions while the app remains open, and refresh a
+  // saved token when webOS returns the app to the foreground.
+  function refreshSession() { if (N.api && N.api.host && N.isLoggedIn()) N.refreshSession().catch(function () {}); }
+  window.addEventListener('focus', refreshSession);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshSession(); });
+  setInterval(function () { if (!document.hidden) refreshSession(); }, 60 * 60 * 1000);
 
   // Scale the 1920x1080 stage down on smaller windows (desktop testing). No-op on a 1080p TV.
   function fit() {
