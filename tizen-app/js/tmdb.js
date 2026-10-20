@@ -391,7 +391,7 @@
     if (f && Date.now() - f.t < 10 * 60 * 1000 && !(f.done && !f.items.length)) return f;
     return (feeds[name] = makeFeed(name));
   };
-  T.startHome = function () { T.feed('trend'); T.feed('series'); T.feed('latest'); };
+  T.startHome = function () { T.feed('trend'); T.feed('latest'); };
   // Resolves with up to `n` trending posts that have a TMDB backdrop (fewer on timeout); never rejects.
   T.heroes = function (n, ms) {
     return new Promise(function (res) {

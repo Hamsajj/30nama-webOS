@@ -220,7 +220,7 @@
     var tmRows = {}, tmFeeds = [];
     function tmSetup() {
       if (!N.tmdb.enabled()) return;
-      var TD = [['trend', 'trendingWeek', 5], ['series', 'latestPopularSeries', 5], ['latest', 'latestPopularMovies', 5]];
+      var TD = [['trend', 'trendingWeek', 5], ['latest', 'latestPopularMovies', 5]];
       TD.forEach(function (x) {
         var f = N.tmdb.feed(x[0]); tmFeeds.push(f);
         function cb() {
@@ -231,8 +231,8 @@
             var d = { key: 'tm_' + x[0], title: N.t(x[1]), kind: 'poster', posts: items.map(function (it) { return it.post; }) };
             r = tmRows[x[0]] = makeRow(d); r.n = items.length;
             var at = 0; while (at < defs.length && (defs[at].key === 'cw' || defs[at].key.indexOf('tm_') === 0)) at++;
-            // keep trend < fresh < pop order
-            var order = { tm_trend: 0, tm_series: 1, tm_latest: 2 };
+            // Keep the discovery rows in their intended order.
+            var order = { tm_trend: 0, tm_latest: 1 };
             at = 0; while (at < defs.length && (defs[at].key === 'cw' || (order[defs[at].key] !== undefined && order[defs[at].key] < order[d.key]))) at++;
             insertRowAt(r, at);
           } else {

@@ -50,6 +50,7 @@
     var url = kind === 'land' ? (ui.coverUrl(post) || ui.posterUrl(post)) : ui.posterUrl(post);
     if (kind === 'tile') url = o.image || '';
     c._post = post; c._src = url;
+    if (po.is_series) c.classList.add('is-series');
     var holder = c;
     if (kind === 'top') {
       c.appendChild(el('div', 'rank', String(o.rank)));
